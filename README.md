@@ -1,4 +1,4 @@
-# DNS Speed Test Script
+# pingerr
 
 A comprehensive DNS benchmarking tool that tests 60+ public DNS servers to find the fastest and most reliable DNS resolver for your network.
 
