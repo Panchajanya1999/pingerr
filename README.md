@@ -2,7 +2,7 @@
 
 A comprehensive DNS benchmarking tool that tests 60+ public DNS servers to find the fastest and most reliable DNS resolver for your network.
 
-## 🚀 Features
+## Features
 
 - **Tests 60+ DNS Servers**: Including Google, Cloudflare, Quad9, OpenDNS, AdGuard, and many more
 - **Multiple Test Iterations**: Performs 5 tests per server using different popular domains
