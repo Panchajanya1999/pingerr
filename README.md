@@ -2,7 +2,7 @@
 
 A comprehensive DNS benchmarking tool that tests 60+ public DNS servers to find the fastest and most reliable DNS resolver for your network.
 
-## Features
+## 🚀 Features
 
 - **Tests 60+ DNS Servers**: Including Google, Cloudflare, Quad9, OpenDNS, AdGuard, and many more
 - **Multiple Test Iterations**: Performs 5 tests per server using different popular domains
@@ -19,6 +19,27 @@ The script evaluates DNS servers across 15 popular domains including:
 - whatsapp.com, reddit.com, wikipedia.org
 - amazon.com, tiktok.com, cloudflare.com
 - github.com, netflix.com, pinterest.com
+
+## Videos
+### Demo Videos
+
+#### Archlinux
+
+
+https://github.com/user-attachments/assets/03f3c379-31b7-4e70-a2c6-28a5af8f27a1
+
+
+
+
+#### OpenWRT
+
+
+https://github.com/user-attachments/assets/04be614f-e4ae-4790-a437-95001589dd3e
+
+
+
+
+> **Note:** Embedded videos may not play on GitHub.com due to platform limitations. If so, [click here for Archlinux](https://storage.panchajanya.dev/Screencasts/archlinux.mp4) or [OpenWRT](https://storage.panchajanya.dev/Screencasts/openwrt.mp4).
 
 ## Installation & Usage
 
