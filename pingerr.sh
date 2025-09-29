@@ -18,11 +18,11 @@
 # Tests multiple DNS providers and finds the fastest one
 
 # Color codes for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+RED=$(printf '\033[0;31m')
+GREEN=$(printf '\033[0;32m')
+YELLOW=$(printf '\033[1;33m')
+BLUE=$(printf '\033[0;34m')
+NC=$(printf '\033[0m') # No Color
 
 # Number of tests per DNS server
 TEST_COUNT=5
@@ -137,10 +137,10 @@ test_dns() {
     
     # Use dig to test DNS server
     if command -v dig &> /dev/null; then
-        result=$(dig @${dns_server} ${domain} +noall +stats +time=${timeout} 2>/dev/null | grep "Query time:" | awk '{print $4}')
+        result=$(dig @"${dns_server}" "${domain}" +noall +stats +time=${timeout} 2>/dev/null | grep "Query time:" | awk '{print $4}')
     elif command -v nslookup &> /dev/null; then
         # Fallback to nslookup with time command
-        result=$(( { time -p nslookup ${domain} ${dns_server} 2>&1; } 2>&1 | grep real | awk '{print $2}' ) 2>/dev/null)
+        result=$( { time -p nslookup "${domain}" "${dns_server}" 2>&1; } 2>&1 | grep real | awk '{print $2}' 2>/dev/null)
         if [ -n "$result" ]; then
             # Convert seconds to milliseconds
             result=$(echo "$result * 1000" | bc 2>/dev/null | cut -d'.' -f1)
@@ -164,7 +164,7 @@ test_dns() {
 calculate_average() {
     local sum=0
     local count=0
-    for val in $@; do
+    for val in "$@"; do
         if [ "$val" != "0" ]; then
             sum=$((sum + val))
             count=$((count + 1))
@@ -237,7 +237,7 @@ for dns_name in "${!DNS_SERVERS[@]}"; do
     
     if [ -z "$times" ] || [ $failed -eq $TEST_COUNT ]; then
         DNS_FAILED["$dns_name"]="$dns_ip"
-        printf "${RED}FAILED${NC}\n"
+        printf '%sFAILED%s\n' "${RED}" "${NC}"
     else
         avg=$(calculate_average $times)
         DNS_RESULTS["$dns_name"]="$avg|$dns_ip"
@@ -375,7 +375,7 @@ test_ping() {
     
     # Try to ping with 3 packets, 1 second timeout
     if command -v ping &> /dev/null; then
-        result=$(ping -c ${count} -W 1 -q ${ip} 2>/dev/null | grep "avg" | awk -F'/' '{print $5}' 2>/dev/null)
+        result=$(ping -c ${count} -W 1 -q "${ip}" 2>/dev/null | grep "avg" | awk -F'/' '{print $5}' 2>/dev/null)
         if [ -n "$result" ]; then
             # Convert to integer (remove decimal part)
             echo "${result%%.*}"
@@ -404,7 +404,7 @@ for dns_name in "${!DNS_RESULTS[@]}"; do
     ping_time=$(test_ping "$ip")
     
     if [ "$ping_time" == "9999" ]; then
-        printf "${RED}FAILED${NC}\n"
+        printf '%sFAILED%s\n' "${RED}" "${NC}"
         # Still calculate score but with penalty
         correlation_score=$((dns_time * 3))  # Heavy penalty for failed ping
     else
