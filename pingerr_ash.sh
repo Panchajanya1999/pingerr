@@ -32,6 +32,8 @@ TEST_COUNT=5
 TEST_DOMAINS="google.com youtube.com facebook.com instagram.com chatgpt.com x.com whatsapp.com reddit.com wikipedia.org amazon.com tiktok.com pinterest.com cloudflare.com github.com netflix.com"
 
 # Convert to list for counting
+# shellcheck disable=SC2086
+# Note: $TEST_DOMAINS intentionally unquoted to split into array
 set -- $TEST_DOMAINS
 TEST_DOMAIN_COUNT=$#
 
@@ -251,41 +253,90 @@ total=$DNS_COUNT
 printf '%bStarting DNS tests...%s\n' "${YELLOW}" "${NC}"
 echo ""
 
+MAX_DNS_PARALLEL=10
+
+# Create temp directory for DNS results
+DNS_TEMP_DIR="/tmp/dns_temp_$$"
+mkdir -p "$DNS_TEMP_DIR"
+trap 'rm -rf "$DNS_TEMP_DIR"' EXIT
+
+printf '%bLaunching parallel DNS tests (max %s concurrent)...%s\n' "${YELLOW}" "$MAX_DNS_PARALLEL" "${NC}"
+echo ""
+
 # Process each DNS server
+job_count=0
 echo "$DNS_SERVERS" | grep -v "^$" | while IFS='|' read -r dns_name dns_ip; do
     current=$((current + 1))
-    
-    # Progress indicator
-    printf "[%3d/%3d] Testing %-35s (%s) ... " "$current" "$total" "$dns_name" "$dns_ip"
-    
-    # Store results for this DNS server
-    times=""
-    failed=0
-    
-    # Test multiple times with different domains
-    i=1
-    while [ $i -le $TEST_COUNT ]; do
-        # Rotate through test domains
-        domain_index=$(( (i - 1) % TEST_DOMAIN_COUNT + 1 ))
-        domain=$(get_test_domain $domain_index)
-        
-        response_time=$(test_dns "$dns_ip" "$domain")
-        
-        if [ "$response_time" = "0" ] || [ -z "$response_time" ]; then
-            failed=$((failed + 1))
+
+    # Create temp file for this DNS result
+    temp_file="$DNS_TEMP_DIR/$(echo "$dns_name" | tr '/' '_').txt"
+
+    # Launch DNS test in background
+    {
+        # Progress indicator
+        printf "[%3d/%3d] Testing %-35s (%s) ... \n" "$current" "$total" "$dns_name" "$dns_ip"
+
+        # Store results for this DNS server
+        times=""
+        failed=0
+
+        # Test multiple times with different domains
+        i=1
+        while [ $i -le $TEST_COUNT ]; do
+            # Rotate through test domains
+            domain_index=$(( (i - 1) % TEST_DOMAIN_COUNT + 1 ))
+            domain=$(get_test_domain $domain_index)
+
+            response_time=$(test_dns "$dns_ip" "$domain")
+
+            if [ "$response_time" = "0" ] || [ -z "$response_time" ]; then
+                failed=$((failed + 1))
+            else
+                times="$times $response_time"
+            fi
+            i=$((i + 1))
+        done
+
+        if [ -z "$times" ] || [ $failed -eq $TEST_COUNT ]; then
+            echo "FAILED|$dns_name|$dns_ip" > "$temp_file"
+            printf "[%3d/%3d] %-35s (%s): %bFAILED%s\n" "$current" "$total" "$dns_name" "$dns_ip" "${RED}" "${NC}"
         else
-            times="$times $response_time"
+            # shellcheck disable=SC2086
+            # Note: $times intentionally unquoted - it contains space-separated values
+            avg=$(calculate_average $times)
+            echo "SUCCESS|$dns_name|$avg|$dns_ip" > "$temp_file"
+            printf "[%3d/%3d] %-35s (%s): ${GREEN}%4d ms${NC}\n" "$current" "$total" "$dns_name" "$dns_ip" "$avg"
         fi
-        i=$((i + 1))
-    done
-    
-    if [ -z "$times" ] || [ $failed -eq $TEST_COUNT ]; then
-        echo "$dns_name|$dns_ip" >> $FAILED_FILE
-        printf '%bFAILED%s\n' "${RED}" "${NC}"
-    else
-        avg=$(calculate_average $times)
-        echo "$dns_name|$avg|$dns_ip" >> $RESULTS_FILE
-        printf "${GREEN}%4d ms${NC}\n" "$avg"
+    } &
+
+    job_count=$((job_count + 1))
+
+    # Limit parallel jobs (ash doesn't have wait -n, so use job count)
+    if [ $job_count -ge $MAX_DNS_PARALLEL ]; then
+        wait
+        job_count=0
+    fi
+done
+
+# Wait for all remaining jobs
+wait
+
+printf '\n%bAll DNS tests completed!%s\n' "${GREEN}" "${NC}"
+echo ""
+
+# Collect results from temp files
+echo "Processing DNS test results..."
+for temp_file in "$DNS_TEMP_DIR"/*.txt; do
+    if [ -f "$temp_file" ]; then
+        read -r status name data1 data2 < "$temp_file"
+        case "$status" in
+            FAILED)
+                echo "$name|$data1" >> $FAILED_FILE
+                ;;
+            SUCCESS)
+                echo "$name|$data1|$data2" >> $RESULTS_FILE
+                ;;
+        esac
     fi
 done
 
@@ -408,36 +459,73 @@ echo ""
 if [ -f "$RESULTS_FILE" ] && [ -s "$RESULTS_FILE" ]; then
     printf '%bTesting ping latency for working DNS servers and calculating correlation score...%s\n' "${YELLOW}" "${NC}"
     echo ""
-    
+
+    MAX_PING_PARALLEL=20
+
+    # Create temp directory for ping results
+    PING_TEMP_DIR="/tmp/ping_temp_$$"
+    mkdir -p "$PING_TEMP_DIR"
+    trap 'rm -rf "$DNS_TEMP_DIR" "$PING_TEMP_DIR"' EXIT
+
     # Progress for correlation test
     current=0
     tested_count=$(wc -l < $RESULTS_FILE)
-    
+    ping_job_count=0
+
     printf 'Testing ping latency for %s working DNS servers...\n' "$tested_count"
     echo ""
-    
+    printf '%bLaunching parallel ping tests (max %s concurrent)...%s\n' "${YELLOW}" "$MAX_PING_PARALLEL" "${NC}"
+
     # Test ping for each working DNS server
     while IFS='|' read -r dns_name dns_time ip; do
         current=$((current + 1))
-        
-        printf "[%3d/%3d] Pinging %-35s (%s) ... " "$current" "$tested_count" "$dns_name" "$ip"
-        
-        ping_time=$(test_ping "$ip")
-        
-        if [ "$ping_time" = "9999" ]; then
-            printf '%bFAILED%s\n' "${RED}" "${NC}"
-            # Skip failed ping servers - don't store in correlation results
-        else
-            printf "${GREEN}%4d ms${NC}\n" "$ping_time"
 
-            # Calculate correlation score (weighted average)
-            # DNS query time is more important (70%) than ping (30%)
-            correlation_score=$(( (dns_time * 70 + ping_time * 30) / 100 ))
+        # Create temp file for this ping result
+        ping_temp_file="$PING_TEMP_DIR/$(echo "$dns_name" | tr '/' '_').txt"
 
-            # Only store results for servers with successful pings
-            echo "$correlation_score|$dns_name|$dns_time|$ping_time|$ip" >> $CORRELATION_FILE
+        # Launch ping test in background
+        {
+            printf "[%3d/%3d] Pinging %-35s (%s) ... \n" "$current" "$tested_count" "$dns_name" "$ip"
+
+            ping_time=$(test_ping "$ip")
+
+            if [ "$ping_time" = "9999" ]; then
+                printf "[%3d/%3d] %-35s (%s): %bFAILED%s\n" "$current" "$tested_count" "$dns_name" "$ip" "${RED}" "${NC}"
+                # Skip failed ping servers - don't store in correlation results
+            else
+                printf "[%3d/%3d] %-35s (%s): ${GREEN}%4d ms${NC}\n" "$current" "$tested_count" "$dns_name" "$ip" "$ping_time"
+
+                # Calculate correlation score (weighted average)
+                # DNS query time is more important (70%) than ping (30%)
+                correlation_score=$(( (dns_time * 70 + ping_time * 30) / 100 ))
+
+                # Save results to temp file
+                echo "$correlation_score|$dns_name|$dns_time|$ping_time|$ip" > "$ping_temp_file"
+            fi
+        } &
+
+        ping_job_count=$((ping_job_count + 1))
+
+        # Limit parallel jobs (ash doesn't have wait -n, so use job count)
+        if [ $ping_job_count -ge $MAX_PING_PARALLEL ]; then
+            wait
+            ping_job_count=0
         fi
     done < $RESULTS_FILE
+
+    # Wait for all remaining ping jobs
+    wait
+
+    printf '\n%bAll ping tests completed!%s\n' "${GREEN}" "${NC}"
+    echo ""
+
+    # Collect results from temp files
+    echo "Processing ping test results..."
+    for ping_temp_file in "$PING_TEMP_DIR"/*.txt; do
+        if [ -f "$ping_temp_file" ]; then
+            cat "$ping_temp_file" >> $CORRELATION_FILE
+        fi
+    done
     
     echo ""
     printf '%bDNS-Ping Correlation Results (Best → Worst):%s\n' "${GREEN}" "${NC}"
