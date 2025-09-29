@@ -260,6 +260,9 @@ DNS_TEMP_DIR="/tmp/dns_temp_$$"
 mkdir -p "$DNS_TEMP_DIR"
 trap 'rm -rf "$DNS_TEMP_DIR"' EXIT
 
+# Export for subshells
+export DNS_TEMP_DIR
+
 printf '%bLaunching parallel DNS tests (max %s concurrent)...%s\n' "${YELLOW}" "$MAX_DNS_PARALLEL" "${NC}"
 echo ""
 
@@ -268,8 +271,8 @@ job_count=0
 echo "$DNS_SERVERS" | grep -v "^$" | while IFS='|' read -r dns_name dns_ip; do
     current=$((current + 1))
 
-    # Create temp file for this DNS result
-    temp_file="$DNS_TEMP_DIR/$(echo "$dns_name" | tr '/' '_').txt"
+    # Create temp file for this DNS result (sanitize all special characters)
+    temp_file="$DNS_TEMP_DIR/$(echo "$dns_name" | tr '/' '_' | tr ' ' '_').txt"
 
     # Launch DNS test in background
     {
@@ -326,19 +329,22 @@ echo ""
 
 # Collect results from temp files
 echo "Processing DNS test results..."
-for temp_file in "$DNS_TEMP_DIR"/*.txt; do
-    if [ -f "$temp_file" ]; then
-        read -r status name data1 data2 < "$temp_file"
-        case "$status" in
-            FAILED)
-                echo "$name|$data1" >> $FAILED_FILE
-                ;;
-            SUCCESS)
-                echo "$name|$data1|$data2" >> $RESULTS_FILE
-                ;;
-        esac
-    fi
-done
+# Use find to locate all txt files in temp directory
+if [ -d "$DNS_TEMP_DIR" ]; then
+    find "$DNS_TEMP_DIR" -name "*.txt" -type f | while read -r temp_file; do
+        if [ -f "$temp_file" ]; then
+            IFS='|' read -r status name data1 data2 < "$temp_file"
+            case "$status" in
+                FAILED)
+                    echo "$name|$data1" >> $FAILED_FILE
+                    ;;
+                SUCCESS)
+                    echo "$name|$data1|$data2" >> $RESULTS_FILE
+                    ;;
+            esac
+        fi
+    done
+fi
 
 echo ""
 printf '%b════════════════════════════════════════════════════════════════════════════════════════════════════%s\n' "${BLUE}" "${NC}"
@@ -467,6 +473,9 @@ if [ -f "$RESULTS_FILE" ] && [ -s "$RESULTS_FILE" ]; then
     mkdir -p "$PING_TEMP_DIR"
     trap 'rm -rf "$DNS_TEMP_DIR" "$PING_TEMP_DIR"' EXIT
 
+    # Export for subshells
+    export PING_TEMP_DIR
+
     # Progress for correlation test
     current=0
     tested_count=$(wc -l < $RESULTS_FILE)
@@ -480,8 +489,8 @@ if [ -f "$RESULTS_FILE" ] && [ -s "$RESULTS_FILE" ]; then
     while IFS='|' read -r dns_name dns_time ip; do
         current=$((current + 1))
 
-        # Create temp file for this ping result
-        ping_temp_file="$PING_TEMP_DIR/$(echo "$dns_name" | tr '/' '_').txt"
+        # Create temp file for this ping result (sanitize all special characters)
+        ping_temp_file="$PING_TEMP_DIR/$(echo "$dns_name" | tr '/' '_' | tr ' ' '_').txt"
 
         # Launch ping test in background
         {
@@ -521,11 +530,14 @@ if [ -f "$RESULTS_FILE" ] && [ -s "$RESULTS_FILE" ]; then
 
     # Collect results from temp files
     echo "Processing ping test results..."
-    for ping_temp_file in "$PING_TEMP_DIR"/*.txt; do
-        if [ -f "$ping_temp_file" ]; then
-            cat "$ping_temp_file" >> $CORRELATION_FILE
-        fi
-    done
+    # Use find to locate all txt files in ping temp directory
+    if [ -d "$PING_TEMP_DIR" ]; then
+        find "$PING_TEMP_DIR" -name "*.txt" -type f | while read -r ping_temp_file; do
+            if [ -f "$ping_temp_file" ]; then
+                cat "$ping_temp_file" >> $CORRELATION_FILE
+            fi
+        done
+    fi
     
     echo ""
     printf '%bDNS-Ping Correlation Results (Best → Worst):%s\n' "${GREEN}" "${NC}"

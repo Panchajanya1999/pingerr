@@ -220,8 +220,9 @@ for dns_name in "${!DNS_SERVERS[@]}"; do
     dns_ip="${DNS_SERVERS[$dns_name]}"
     current=$((current + 1))
 
-    # Create temp file for this DNS server result
-    dns_temp_file="$DNS_TEMP_DIR/${dns_name//\//_}.txt"
+    # Create temp file for this DNS server result (sanitize special characters)
+    sanitized_name="${dns_name//[\/\ ]/_}"
+    dns_temp_file="$DNS_TEMP_DIR/${sanitized_name}.txt"
 
     # Launch DNS test in background
     {
@@ -275,7 +276,8 @@ echo -e "\n${GREEN}All DNS tests completed!${NC}\n"
 # Collect results from temp files
 echo "Processing DNS test results..."
 for dns_name in "${!DNS_SERVERS[@]}"; do
-    dns_temp_file="$DNS_TEMP_DIR/${dns_name//\//_}.txt"
+    sanitized_name="${dns_name//[\/\ ]/_}"
+    dns_temp_file="$DNS_TEMP_DIR/${sanitized_name}.txt"
     if [ -f "$dns_temp_file" ]; then
         IFS='|' read -r status name data1 data2 < "$dns_temp_file"
         if [ "$status" == "FAILED" ]; then
@@ -448,8 +450,9 @@ for dns_name in "${!DNS_RESULTS[@]}"; do
     IFS='|' read -r dns_time ip <<< "${DNS_RESULTS[$dns_name]}"
     current=$((current + 1))
 
-    # Create temp file for this result
-    temp_file="$TEMP_DIR/${dns_name//\//_}.txt"
+    # Create temp file for this result (sanitize special characters)
+    sanitized_name="${dns_name//[\/\ ]/_}"
+    temp_file="$TEMP_DIR/${sanitized_name}.txt"
 
     # Launch ping test in background
     {
@@ -488,7 +491,8 @@ echo -e "\n${GREEN}All ping tests completed!${NC}\n"
 # Collect results from temp files
 echo "Processing results..."
 for dns_name in "${!DNS_RESULTS[@]}"; do
-    temp_file="$TEMP_DIR/${dns_name//\//_}.txt"
+    sanitized_name="${dns_name//[\/\ ]/_}"
+    temp_file="$TEMP_DIR/${sanitized_name}.txt"
     if [ -f "$temp_file" ]; then
         IFS='|' read -r name score dns_time ping_time ip < "$temp_file"
         CORRELATION_RESULTS["$name"]="${score}|${dns_time}|${ping_time}|${ip}"
