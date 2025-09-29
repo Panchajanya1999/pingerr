@@ -1,0 +1,35 @@
+name: Shellcheck
+
+on:
+  push:
+    paths:
+      - 'pingerr.sh'
+      - 'pingerr_ash.sh'
+  pull_request:
+    paths:
+      - 'pingerr.sh'
+      - 'pingerr_ash.sh'
+
+jobs:
+  shellcheck:
+    name: Shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run ShellCheck on pingerr.sh
+        uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: '.'
+          format: gcc
+          severity: error
+          additional_files: 'pingerr.sh'
+
+      - name: Run ShellCheck on pingerr_ash.sh
+        uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: '.'
+          format: gcc
+          severity: error
+          additional_files: 'pingerr_ash.sh'

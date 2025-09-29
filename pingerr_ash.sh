@@ -1,4 +1,5 @@
 #!/bin/ash
+# shellcheck shell=dash
 
 # Copyright 2025 Panchajanya1999
 #
@@ -17,12 +18,12 @@
 # DNS Speed Test Script for OpenWRT (ash shell compatible)
 # Tests multiple DNS providers and finds the fastest one
 
-# Color codes for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+# Color codes for output (using printf format for ash compatibility)
+RED=$(printf '\033[0;31m')
+GREEN=$(printf '\033[0;32m')
+YELLOW=$(printf '\033[1;33m')
+BLUE=$(printf '\033[0;34m')
+NC=$(printf '\033[0m') # No Color
 
 # Number of tests per DNS server
 TEST_COUNT=5
@@ -119,11 +120,11 @@ FAILED_FILE="/tmp/dns_failed_$$"
 CORRELATION_FILE="/tmp/dns_correlation_$$"
 
 # Clean up temp files on exit
-trap "rm -f $RESULTS_FILE $FAILED_FILE $CORRELATION_FILE" EXIT
+trap 'rm -f "$RESULTS_FILE" "$FAILED_FILE" "$CORRELATION_FILE"' EXIT
 
 # Function to count DNS servers
 count_dns_servers() {
-    echo "$DNS_SERVERS" | grep -v "^$" | wc -l
+    echo "$DNS_SERVERS" | grep -c -v "^$"
 }
 
 # Function to get nth test domain
@@ -132,7 +133,7 @@ get_test_domain() {
     local count=0
     for domain in $TEST_DOMAINS; do
         count=$((count + 1))
-        if [ $count -eq $index ]; then
+        if [ $count -eq "$index" ]; then
             echo "$domain"
             return
         fi
@@ -149,13 +150,15 @@ test_dns() {
     
     # Use dig to test DNS server
     if command -v dig >/dev/null 2>&1; then
-        result=$(dig @${dns_server} ${domain} +noall +stats +time=${timeout} 2>/dev/null | grep "Query time:" | awk '{print $4}')
+        result=$(dig @"${dns_server}" "${domain}" +noall +stats +time=${timeout} 2>/dev/null | grep "Query time:" | awk '{print $4}')
     elif command -v nslookup >/dev/null 2>&1; then
         # Fallback to nslookup with time command
-        local start=$(date +%s%3N 2>/dev/null || date +%s)
-        nslookup ${domain} ${dns_server} >/dev/null 2>&1
-        local end=$(date +%s%3N 2>/dev/null || date +%s)
-        if [ $? -eq 0 ]; then
+        local start
+        start=$(date +%s%3N 2>/dev/null || date +%s)
+        nslookup "${domain}" "${dns_server}" >/dev/null 2>&1
+        local end
+        end=$(date +%s%3N 2>/dev/null || date +%s)
+        if nslookup "${domain}" "${dns_server}" >/dev/null 2>&1; then
             result=$((end - start))
         fi
     else
@@ -179,7 +182,7 @@ calculate_average() {
     local count=0
     local val
     
-    for val in $@; do
+    for val in "$@"; do
         if [ "$val" != "0" ] && [ "$val" != "" ]; then
             sum=$((sum + val))
             count=$((count + 1))
@@ -201,7 +204,7 @@ test_ping() {
     
     # Try to ping with 3 packets, 1 second timeout
     if command -v ping >/dev/null 2>&1; then
-        result=$(ping -c ${count} -W 1 -q ${ip} 2>/dev/null | grep "avg" | awk -F'/' '{print $5}' 2>/dev/null)
+        result=$(ping -c ${count} -W 1 -q "${ip}" 2>/dev/null | grep "avg" | awk -F'/' '{print $5}' 2>/dev/null)
         if [ -n "$result" ]; then
             # Convert to integer (remove decimal part)
             result=${result%%.*}
@@ -216,7 +219,7 @@ test_ping() {
 
 # Check for required commands
 if ! command -v dig >/dev/null 2>&1 && ! command -v nslookup >/dev/null 2>&1; then
-    echo -e "${RED}Error: Neither 'dig' nor 'nslookup' found. Please install dnsutils/bind-tools.${NC}"
+    printf '%bError: Neither %s nor %s found. Please install dnsutils/bind-tools.%s\n' "${RED}" "'dig'" "'nslookup'" "${NC}"
     echo "On OpenWRT: opkg install bind-dig"
     echo "On Debian/Ubuntu: apt-get install dnsutils"
     echo "On RHEL/CentOS: yum install bind-utils"
@@ -228,16 +231,16 @@ DNS_COUNT=$(count_dns_servers)
 
 # Header
 total_tests=$((DNS_COUNT * TEST_COUNT))
-echo -e "${BLUE}════════════════════════════════════════════════════════════════${NC}"
-echo -e "${GREEN}      DNS Speed Test - Testing ${DNS_COUNT} DNS Servers${NC}"
-echo -e "${BLUE}════════════════════════════════════════════════════════════════${NC}"
+printf '%b════════════════════════════════════════════════════════════════%s\n' "${BLUE}" "${NC}"
+printf '%b      DNS Speed Test - Testing %s DNS Servers%s\n' "${GREEN}" "${DNS_COUNT}" "${NC}"
+printf '%b════════════════════════════════════════════════════════════════%s\n' "${BLUE}" "${NC}"
 echo ""
-echo -e "Total DNS Servers: ${DNS_COUNT}"
-echo -e "Tests per server: ${TEST_COUNT}"
-echo -e "Total tests to run: ${total_tests}"
-echo -e "Test domains: ${TEST_DOMAIN_COUNT} popular websites"
+printf 'Total DNS Servers: %s\n' "${DNS_COUNT}"
+printf 'Tests per server: %s\n' "${TEST_COUNT}"
+printf 'Total tests to run: %s\n' "${total_tests}"
+printf 'Test domains: %s popular websites\n' "${TEST_DOMAIN_COUNT}"
 echo ""
-echo -e "${YELLOW}This will take a few minutes to complete...${NC}"
+printf '%bThis will take a few minutes to complete...%s\n' "${YELLOW}" "${NC}"
 echo ""
 
 # Progress counter
@@ -245,7 +248,7 @@ current=0
 total=$DNS_COUNT
 
 # Test each DNS server
-echo -e "${YELLOW}Starting DNS tests...${NC}"
+printf '%bStarting DNS tests...%s\n' "${YELLOW}" "${NC}"
 echo ""
 
 # Process each DNS server
@@ -278,7 +281,7 @@ echo "$DNS_SERVERS" | grep -v "^$" | while IFS='|' read -r dns_name dns_ip; do
     
     if [ -z "$times" ] || [ $failed -eq $TEST_COUNT ]; then
         echo "$dns_name|$dns_ip" >> $FAILED_FILE
-        printf "${RED}FAILED${NC}\n"
+        printf '%bFAILED%s\n' "${RED}" "${NC}"
     else
         avg=$(calculate_average $times)
         echo "$dns_name|$avg|$dns_ip" >> $RESULTS_FILE
@@ -287,17 +290,17 @@ echo "$DNS_SERVERS" | grep -v "^$" | while IFS='|' read -r dns_name dns_ip; do
 done
 
 echo ""
-echo -e "${BLUE}════════════════════════════════════════════════════════════════════════════════════════════════════${NC}"
-echo -e "${GREEN}                                    COMPLETE RESULTS (BEST → WORST)${NC}"
-echo -e "${BLUE}════════════════════════════════════════════════════════════════════════════════════════════════════${NC}"
+printf '%b════════════════════════════════════════════════════════════════════════════════════════════════════%s\n' "${BLUE}" "${NC}"
+printf '%b                                    COMPLETE RESULTS (BEST → WORST)%s\n' "${GREEN}" "${NC}"
+printf '%b════════════════════════════════════════════════════════════════════════════════════════════════════%s\n' "${BLUE}" "${NC}"
 echo ""
 
 # Sort and display ALL results
 if [ -f "$RESULTS_FILE" ] && [ -s "$RESULTS_FILE" ]; then
-    echo -e "${GREEN}All DNS Servers Ranked by Speed:${NC}"
-    echo -e "┌──────┬──────────────────────────────────────┬───────────────────────┬───────────┐"
-    echo -e "│ Rank │ DNS Server                           │ IP Address            │ Avg Time  │"
-    echo -e "├──────┼──────────────────────────────────────┼───────────────────────┼───────────┤"
+    printf '%bAll DNS Servers Ranked by Speed:%s\n' "${GREEN}" "${NC}"
+    printf '┌──────┬──────────────────────────────────────┬───────────────────────┬───────────┐\n'
+    printf '│ Rank │ DNS Server                           │ IP Address            │ Avg Time  │\n'
+    printf '├──────┼──────────────────────────────────────┼───────────────────────┼───────────┤\n'
     
     rank=1
     sort -t'|' -k2 -n $RESULTS_FILE | while IFS='|' read -r dns_name avg ip; do
@@ -314,7 +317,7 @@ if [ -f "$RESULTS_FILE" ] && [ -s "$RESULTS_FILE" ]; then
         rank=$((rank + 1))
     done
     
-    echo -e "└──────┴──────────────────────────────────────┴───────────────────────┴───────────┘"
+    printf '└──────┴──────────────────────────────────────┴───────────────────────┴───────────┘\n'
     echo ""
 fi
 
@@ -329,84 +332,88 @@ if [ -f "$FAILED_FILE" ]; then
 fi
 total_tested=$((working_count + failed_count))
 
-echo -e "${GREEN}Statistics:${NC}"
-echo -e "  Total Tested: $total_tested"
-echo -e "  Working: ${GREEN}$working_count${NC}"
-echo -e "  Failed: ${RED}$failed_count${NC}"
+printf '%bStatistics:%s\n' "${GREEN}" "${NC}"
+printf '  Total Tested: %s\n' "$total_tested"
+printf '  Working: %s%s%s\n' "${GREEN}" "$working_count" "${NC}"
+printf '  Failed: %s%s%s\n' "${RED}" "$failed_count" "${NC}"
 echo ""
 
 # Show the best DNS server
 if [ -f "$RESULTS_FILE" ] && [ -s "$RESULTS_FILE" ]; then
     best_dns=$(sort -t'|' -k2 -n $RESULTS_FILE | head -1)
     if [ -n "$best_dns" ]; then
-        echo "$best_dns" | IFS='|' read -r name avg ip
-        echo -e "${BLUE}════════════════════════════════════════════════════════════════════════════════════════════════════${NC}"
-        echo -e "${GREEN}🏆 BEST DNS SERVER: $name${NC}"
-        echo -e "   IP Address: $ip"
-        echo -e "   Average Response Time: ${GREEN}$avg ms${NC}"
-        echo -e "${BLUE}════════════════════════════════════════════════════════════════════════════════════════════════════${NC}"
+        name=$(echo "$best_dns" | cut -d'|' -f1)
+        avg=$(echo "$best_dns" | cut -d'|' -f2)
+        ip=$(echo "$best_dns" | cut -d'|' -f3)
+        printf '%b════════════════════════════════════════════════════════════════════════════════════════════════════%b\n' "${BLUE}" "${NC}"
+        printf '%b🏆 BEST DNS SERVER: %s%b\n' "${GREEN}" "$name" "${NC}"
+        printf '   IP Address: %s\n' "$ip"
+        printf '   Average Response Time: %b%s ms%b\n' "${GREEN}" "$avg" "${NC}"
+        printf '%b════════════════════════════════════════════════════════════════════════════════════════════════════%b\n' "${BLUE}" "${NC}"
     fi
 fi
 
 # Show failed DNS servers if any
 if [ -f "$FAILED_FILE" ] && [ -s "$FAILED_FILE" ]; then
     echo ""
-    echo -e "${RED}Failed/Unreachable DNS Servers:${NC}"
-    echo -e "┌──────────────────────────────────────┬───────────────────────┐"
-    echo -e "│ DNS Server                           │ IP Address            │"
-    echo -e "├──────────────────────────────────────┼───────────────────────┤"
+    printf '%bFailed/Unreachable DNS Servers:%s\n' "${RED}" "${NC}"
+    printf '┌──────────────────────────────────────┬───────────────────────┐\n'
+    printf '│ DNS Server                           │ IP Address            │\n'
+    printf '├──────────────────────────────────────┼───────────────────────┤\n'
     while IFS='|' read -r dns_name dns_ip; do
         printf "│ %-36s │ %-21s │\n" "$dns_name" "$dns_ip"
     done < $FAILED_FILE
-    echo -e "└──────────────────────────────────────┴───────────────────────┘"
+    printf '└──────────────────────────────────────┴───────────────────────┘\n'
 fi
 
 echo ""
-echo -e "${YELLOW}Test completed!${NC}"
+printf '%bTest completed!%s\n' "${YELLOW}" "${NC}"
 echo ""
 
 # Configuration recommendation
-echo -e "${BLUE}════════════════════════════════════════════════════════════════════════════════════════════════════${NC}"
-echo -e "${GREEN}CONFIGURATION RECOMMENDATION FOR OPENWRT:${NC}"
+printf '%b════════════════════════════════════════════════════════════════════════════════════════════════════%s\n' "${BLUE}" "${NC}"
+printf '%bCONFIGURATION RECOMMENDATION FOR OPENWRT:%s\n' "${GREEN}" "${NC}"
 echo ""
 
 if [ -f "$RESULTS_FILE" ] && [ -s "$RESULTS_FILE" ]; then
     # Get top 2 best performing DNS servers
-    best_servers=$(sort -t'|' -k2 -n $RESULTS_FILE | head -2)
-    
-    primary_dns=""
-    secondary_dns=""
-    count=0
-    
-    echo "$best_servers" | while IFS='|' read -r name avg ip; do
-        if [ $count -eq 0 ]; then
-            echo -e "  Primary DNS:   ${GREEN}$ip${NC} ($name - ${avg}ms)"
-        else
-            echo -e "  Secondary DNS: ${GREEN}$ip${NC} ($name - ${avg}ms)"
+    primary_line=$(sort -t'|' -k2 -n $RESULTS_FILE | head -1)
+    secondary_line=$(sort -t'|' -k2 -n $RESULTS_FILE | head -2 | tail -1)
+
+    if [ -n "$primary_line" ]; then
+        primary_name=$(echo "$primary_line" | cut -d'|' -f1)
+        primary_avg=$(echo "$primary_line" | cut -d'|' -f2)
+        primary_ip=$(echo "$primary_line" | cut -d'|' -f3)
+        printf '  Primary DNS:   %b%s%b (%s - %sms)\n' "${GREEN}" "$primary_ip" "${NC}" "$primary_name" "$primary_avg"
+
+        if [ -n "$secondary_line" ] && [ "$secondary_line" != "$primary_line" ]; then
+            secondary_name=$(echo "$secondary_line" | cut -d'|' -f1)
+            secondary_avg=$(echo "$secondary_line" | cut -d'|' -f2)
+            secondary_ip=$(echo "$secondary_line" | cut -d'|' -f3)
+            printf '  Secondary DNS: %b%s%b (%s - %sms)\n' "${GREEN}" "$secondary_ip" "${NC}" "$secondary_name" "$secondary_avg"
         fi
-        count=$((count + 1))
-    done
+    fi
 fi
 
-echo -e "${BLUE}════════════════════════════════════════════════════════════════════════════════════════════════════${NC}"
+printf '%b════════════════════════════════════════════════════════════════════════════════════════════════════%s\n' "${BLUE}" "${NC}"
 
 # DNS-PING CORRELATION TEST
 echo ""
 echo ""
-echo -e "${BLUE}════════════════════════════════════════════════════════════════════════════════════════════════════${NC}"
-echo -e "${GREEN}                                DNS-PING CORRELATION ANALYSIS${NC}"
-echo -e "${BLUE}════════════════════════════════════════════════════════════════════════════════════════════════════${NC}"
+printf '%b════════════════════════════════════════════════════════════════════════════════════════════════════%s\n' "${BLUE}" "${NC}"
+printf '%b                                DNS-PING CORRELATION ANALYSIS%s\n' "${GREEN}" "${NC}"
+printf '%b════════════════════════════════════════════════════════════════════════════════════════════════════%s\n' "${BLUE}" "${NC}"
 echo ""
 
 if [ -f "$RESULTS_FILE" ] && [ -s "$RESULTS_FILE" ]; then
-    echo -e "${YELLOW}Testing ping latency for working DNS servers and calculating correlation score...${NC}"
+    printf '%bTesting ping latency for working DNS servers and calculating correlation score...%s\n' "${YELLOW}" "${NC}"
     echo ""
     
     # Progress for correlation test
     current=0
     tested_count=$(wc -l < $RESULTS_FILE)
     
-    echo -e "Testing ping latency for $tested_count working DNS servers..."
+    printf 'Testing ping latency for %s working DNS servers...\n' "$tested_count"
     echo ""
     
     # Test ping for each working DNS server
@@ -418,26 +425,25 @@ if [ -f "$RESULTS_FILE" ] && [ -s "$RESULTS_FILE" ]; then
         ping_time=$(test_ping "$ip")
         
         if [ "$ping_time" = "9999" ]; then
-            printf "${RED}FAILED${NC}\n"
-            # Still calculate score but with penalty
-            correlation_score=$((dns_time * 3))  # Heavy penalty for failed ping
+            printf '%bFAILED%s\n' "${RED}" "${NC}"
+            # Skip failed ping servers - don't store in correlation results
         else
             printf "${GREEN}%4d ms${NC}\n" "$ping_time"
-            
+
             # Calculate correlation score (weighted average)
             # DNS query time is more important (70%) than ping (30%)
             correlation_score=$(( (dns_time * 70 + ping_time * 30) / 100 ))
+
+            # Only store results for servers with successful pings
+            echo "$correlation_score|$dns_name|$dns_time|$ping_time|$ip" >> $CORRELATION_FILE
         fi
-        
-        # Store results: correlation_score|dns_name|dns_time|ping_time|ip
-        echo "$correlation_score|$dns_name|$dns_time|$ping_time|$ip" >> $CORRELATION_FILE
     done < $RESULTS_FILE
     
     echo ""
-    echo -e "${GREEN}DNS-Ping Correlation Results (Best → Worst):${NC}"
-    echo -e "┌──────┬──────────────────────────────────────┬───────────────────────┬──────────┬──────────┬────────────┬──────────────┐"
-    echo -e "│ Rank │ DNS Server                           │ IP Address            │ DNS (ms) │ Ping(ms) │ Difference │ Score        │"
-    echo -e "├──────┼──────────────────────────────────────┼───────────────────────┼──────────┼──────────┼────────────┼──────────────┤"
+    printf '%bDNS-Ping Correlation Results (Best → Worst):%s\n' "${GREEN}" "${NC}"
+    printf '┌──────┬──────────────────────────────────────┬───────────────────────┬──────────┬──────────┬────────────┬──────────────┐\n'
+    printf '│ Rank │ DNS Server                           │ IP Address            │ DNS (ms) │ Ping(ms) │ Difference │ Score        │\n'
+    printf '├──────┼──────────────────────────────────────┼───────────────────────┼──────────┼──────────┼────────────┼──────────────┤\n'
     
     rank=1
     sort -t'|' -k1 -n $CORRELATION_FILE | while IFS='|' read -r score dns_name dns_time ping_time ip; do
@@ -477,35 +483,39 @@ if [ -f "$RESULTS_FILE" ] && [ -s "$RESULTS_FILE" ]; then
         rank=$((rank + 1))
     done
     
-    echo -e "└──────┴──────────────────────────────────────┴───────────────────────┴──────────┴──────────┴────────────┴──────────────┘"
+    printf '└──────┴──────────────────────────────────────┴───────────────────────┴──────────┴──────────┴────────────┴──────────────┘\n'
     
     echo ""
-    echo -e "${GREEN}Score Calculation:${NC}"
-    echo -e "  Score = (DNS Query Time × 70% + Ping Latency × 30%)"
-    echo -e "  Lower score = Better overall performance"
+    printf '%bScore Calculation:%s\n' "${GREEN}" "${NC}"
+    printf '  Score = (DNS Query Time × 70%% + Ping Latency × 30%%)\n'
+    printf '  Lower score = Better overall performance\n'
     echo ""
     
     # Find best correlation
     if [ -f "$CORRELATION_FILE" ] && [ -s "$CORRELATION_FILE" ]; then
         best_correlation=$(sort -t'|' -k1 -n $CORRELATION_FILE | head -1)
         if [ -n "$best_correlation" ]; then
-            echo "$best_correlation" | IFS='|' read -r score name dns_time ping_time ip
-            echo -e "${BLUE}════════════════════════════════════════════════════════════════════════════════════════════════════${NC}"
-            echo -e "${GREEN}🏆 BEST OVERALL DNS SERVER (DNS+Network Performance):${NC}"
-            echo -e "   Server: $name"
-            echo -e "   IP: $ip"
-            echo -e "   DNS Query: ${GREEN}${dns_time}ms${NC}"
+            score=$(echo "$best_correlation" | cut -d'|' -f1)
+            name=$(echo "$best_correlation" | cut -d'|' -f2)
+            dns_time=$(echo "$best_correlation" | cut -d'|' -f3)
+            ping_time=$(echo "$best_correlation" | cut -d'|' -f4)
+            ip=$(echo "$best_correlation" | cut -d'|' -f5)
+            printf '%b════════════════════════════════════════════════════════════════════════════════════════════════════%b\n' "${BLUE}" "${NC}"
+            printf '%b🏆 BEST OVERALL DNS SERVER (DNS+Network Performance):%b\n' "${GREEN}" "${NC}"
+            printf '   Server: %s\n' "$name"
+            printf '   IP: %s\n' "$ip"
+            printf '   DNS Query: %b%sms%b\n' "${GREEN}" "${dns_time}" "${NC}"
             if [ "$ping_time" != "9999" ]; then
-                echo -e "   Ping Latency: ${GREEN}${ping_time}ms${NC}"
+                printf '   Ping Latency: %b%sms%b\n' "${GREEN}" "${ping_time}" "${NC}"
             else
-                echo -e "   Ping Latency: ${RED}FAILED${NC}"
+                printf '   Ping Latency: %bFAILED%b\n' "${RED}" "${NC}"
             fi
-            echo -e "   Combined Score: ${GREEN}${score}${NC}"
-            echo -e "${BLUE}════════════════════════════════════════════════════════════════════════════════════════════════════${NC}"
+            printf '   Combined Score: %b%s%b\n' "${GREEN}" "${score}" "${NC}"
+            printf '%b════════════════════════════════════════════════════════════════════════════════════════════════════%b\n' "${BLUE}" "${NC}"
         fi
     fi
 fi
 
 echo ""
-echo -e "${YELLOW}Analysis complete!${NC}"
+printf '%bAnalysis complete!%s\n' "${YELLOW}" "${NC}"
 
