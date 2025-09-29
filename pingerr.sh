@@ -405,18 +405,17 @@ for dns_name in "${!DNS_RESULTS[@]}"; do
     
     if [ "$ping_time" == "9999" ]; then
         printf '%sFAILED%s\n' "${RED}" "${NC}"
-        # Still calculate score but with penalty
-        correlation_score=$((dns_time * 3))  # Heavy penalty for failed ping
+        # Skip failed ping servers - don't store in correlation results
     else
         printf "${GREEN}%4d ms${NC}\n" "$ping_time"
-        
+
         # Calculate correlation score (weighted average)
         # DNS query time is more important (70%) than ping (30%)
         correlation_score=$(( (dns_time * 70 + ping_time * 30) / 100 ))
+
+        # Only store results for servers with successful pings
+        CORRELATION_RESULTS["$dns_name"]="${correlation_score}|${dns_time}|${ping_time}|${ip}"
     fi
-    
-    # Store results: correlation_score|dns_time|ping_time|ip
-    CORRELATION_RESULTS["$dns_name"]="${correlation_score}|${dns_time}|${ping_time}|${ip}"
 done
 
 echo ""
