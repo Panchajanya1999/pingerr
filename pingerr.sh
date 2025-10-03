@@ -129,6 +129,15 @@ declare -A DNS_SERVERS=(
 declare -A DNS_RESULTS
 declare -A DNS_FAILED
 
+# Check for required commands
+if ! command -v dig &> /dev/null && ! command -v nslookup &> /dev/null; then
+    echo -e "${RED}Error: Neither 'dig' nor 'nslookup' found. Please install dnsutils/bind-tools.${NC}"
+    echo "On OpenWRT: opkg install bind-dig"
+    echo "On Debian/Ubuntu: apt-get install dnsutils"
+    echo "On RHEL/CentOS: yum install bind-utils"
+    exit 1
+fi
+
 # Function to test DNS response time
 test_dns() {
     local dns_server=$1
@@ -177,15 +186,6 @@ calculate_average() {
         echo $((sum / count))
     fi
 }
-
-# Check for required commands
-if ! command -v dig &> /dev/null && ! command -v nslookup &> /dev/null; then
-    echo -e "${RED}Error: Neither 'dig' nor 'nslookup' found. Please install dnsutils/bind-tools.${NC}"
-    echo "On OpenWRT: opkg install bind-dig"
-    echo "On Debian/Ubuntu: apt-get install dnsutils"
-    echo "On RHEL/CentOS: yum install bind-utils"
-    exit 1
-fi
 
 # Header
 total_tests=$((${#DNS_SERVERS[@]} * TEST_COUNT))

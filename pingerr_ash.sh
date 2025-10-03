@@ -116,6 +116,15 @@ Level3-Primary|209.244.0.3
 Level3-Secondary|209.244.0.4
 "
 
+# Check for required commands
+if ! command -v dig >/dev/null 2>&1 && ! command -v nslookup >/dev/null 2>&1; then
+    printf '%bError: Neither %s nor %s found. Please install dnsutils/bind-tools.%s\n' "${RED}" "'dig'" "'nslookup'" "${NC}"
+    echo "On OpenWRT: opkg install bind-dig"
+    echo "On Debian/Ubuntu: apt-get install dnsutils"
+    echo "On RHEL/CentOS: yum install bind-utils"
+    exit 1
+fi
+
 # Create temp files for results
 RESULTS_FILE="/tmp/dns_results_$$"
 FAILED_FILE="/tmp/dns_failed_$$"
@@ -218,15 +227,6 @@ test_ping() {
         echo "9999"
     fi
 }
-
-# Check for required commands
-if ! command -v dig >/dev/null 2>&1 && ! command -v nslookup >/dev/null 2>&1; then
-    printf '%bError: Neither %s nor %s found. Please install dnsutils/bind-tools.%s\n' "${RED}" "'dig'" "'nslookup'" "${NC}"
-    echo "On OpenWRT: opkg install bind-dig"
-    echo "On Debian/Ubuntu: apt-get install dnsutils"
-    echo "On RHEL/CentOS: yum install bind-utils"
-    exit 1
-fi
 
 # Count total DNS servers
 DNS_COUNT=$(count_dns_servers)
