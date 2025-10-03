@@ -130,8 +130,8 @@ declare -A DNS_RESULTS
 declare -A DNS_FAILED
 
 # Check for required commands
-if ! command -v dig &> /dev/null && ! command -v nslookup &> /dev/null; then
-    echo -e "${RED}Error: Neither 'dig' nor 'nslookup' found. Please install dnsutils/bind-tools.${NC}"
+if ! command -v dig &> /dev/null; then
+    echo -e "${RED}Error: 'dig' not found. Please install dnsutils/bind-tools.${NC}"
     echo "On OpenWRT: opkg install bind-dig"
     echo "On Debian/Ubuntu: apt-get install dnsutils"
     echo "On RHEL/CentOS: yum install bind-utils"
@@ -147,13 +147,6 @@ test_dns() {
     # Use dig to test DNS server
     if command -v dig &> /dev/null; then
         result=$(dig @"${dns_server}" "${domain}" +noall +stats +time=${timeout} 2>/dev/null | grep "Query time:" | awk '{print $4}')
-    elif command -v nslookup &> /dev/null; then
-        # Fallback to nslookup with time command
-        result=$( { time -p nslookup "${domain}" "${dns_server}" 2>&1; } 2>&1 | grep real | awk '{print $2}' 2>/dev/null)
-        if [ -n "$result" ]; then
-            # Convert seconds to milliseconds
-            result=$(echo "$result * 1000" | bc 2>/dev/null | cut -d'.' -f1)
-        fi
     else
         echo "0"
         return 1

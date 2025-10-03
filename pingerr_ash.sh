@@ -117,8 +117,8 @@ Level3-Secondary|209.244.0.4
 "
 
 # Check for required commands
-if ! command -v dig >/dev/null 2>&1 && ! command -v nslookup >/dev/null 2>&1; then
-    printf '%bError: Neither %s nor %s found. Please install dnsutils/bind-tools.%s\n' "${RED}" "'dig'" "'nslookup'" "${NC}"
+if ! command -v dig >/dev/null 2>&1; then
+    printf '%bError: %s not found. Please install dnsutils/bind-tools.%s\n' "${RED}" "'dig'" "${NC}"
     echo "On OpenWRT: opkg install bind-dig"
     echo "On Debian/Ubuntu: apt-get install dnsutils"
     echo "On RHEL/CentOS: yum install bind-utils"
@@ -162,16 +162,6 @@ test_dns() {
     # Use dig to test DNS server
     if command -v dig >/dev/null 2>&1; then
         result=$(dig @"${dns_server}" "${domain}" +noall +stats +time=${timeout} 2>/dev/null | grep "Query time:" | awk '{print $4}')
-    elif command -v nslookup >/dev/null 2>&1; then
-        # Fallback to nslookup with time command
-        local start
-        start=$(date +%s%3N 2>/dev/null || date +%s)
-        nslookup "${domain}" "${dns_server}" >/dev/null 2>&1
-        local end
-        end=$(date +%s%3N 2>/dev/null || date +%s)
-        if nslookup "${domain}" "${dns_server}" >/dev/null 2>&1; then
-            result=$((end - start))
-        fi
     else
         echo "0"
         return 1
