@@ -221,8 +221,6 @@ declare -A DNS_SERVERS_IPV6=(
     ["Comodo-Secondary-v6"]="2606:4700:50::adf5:6f4"
     ["Neustar-Primary-v6"]="2620:74:1b::1:1"
     ["Neustar-Secondary-v6"]="2620:74:1c::2:2"
-    ["Verisign-Primary-v6"]="2620:74:1b::1:1"
-    ["Verisign-Secondary-v6"]="2620:74:1c::2:2"
 )
 
 # Merge DNS servers based on IPv6 availability
