@@ -59,7 +59,7 @@ check_ipv6_connectivity() {
         echo ""
         return 0
     else
-        printf '%b[-] IPv6 connectivity test failed%b\n' "${YELLOW}" "${NC}"
+        printf '%b[-] IPv6 connectivity not avaailable%b\n' "${YELLOW}" "${NC}"
         printf '%b    IPv6 DNS servers will be skipped in this test%b\n' "${YELLOW}" "${NC}"
         echo ""
         return 1
