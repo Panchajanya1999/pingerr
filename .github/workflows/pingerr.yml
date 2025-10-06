@@ -1,0 +1,111 @@
+# Alpine-based CI: run pingerr_ash.sh on every push to master
+# - Uses an alpine container so the script runs in the same environment you specified.
+# - Installs bind-tools (provides dig), curl, wget.
+# - Runs the script with `sh pingerr_ash.sh`.
+# - Fails on non-zero exit code or if output contains error-like keywords.
+
+name: Pingerr Alpine CI
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  pingerr_ash:
+    name: Run pingerr_ash.sh on Alpine
+    runs-on: ubuntu-latest
+    container:
+      image: alpine:3.18
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install required tools (dig, curl, wget)
+        run: |
+          apk add --no-cache bind-tools curl wget
+
+      - name: Run pingerr_ash.sh and check output for errors
+        run: |
+          SCRIPT=pingerr_ash.sh
+          OUT=run-output-pingerr_ash.txt
+
+          if [ ! -f "$SCRIPT" ]; then
+            echo "$SCRIPT not found in repository root"
+            exit 1
+          fi
+
+          chmod +x "$SCRIPT" || true
+          sh "$SCRIPT" > "$OUT" 2>&1
+          rc=$?
+
+          echo "---- $SCRIPT OUTPUT (begin) ----"
+          cat "$OUT"
+          echo "---- $SCRIPT OUTPUT (end) ----"
+
+          if [ $rc -ne 0 ]; then
+            echo "Script $SCRIPT exited with non-zero status: $rc"
+            exit $rc
+          fi
+
+          if grep -i -nE '\b(error|failed|failure|exception)\b' "$OUT"; then
+            echo "Error-like keywords found in $SCRIPT output"
+            exit 1
+          fi
+
+          echo "$SCRIPT completed successfully and no error keywords found."
+
+      - name: Upload pingerr_ash log artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pingerr-ash-run-output
+          path: run-output-pingerr_ash.txt
+
+  pingerr_sh:
+    name: Run pingerr.sh on Alpine
+    runs-on: ubuntu-latest
+    container:
+      image: alpine:3.18
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install required tools (dig, curl, wget)
+        run: |
+          apk add --no-cache bind-tools curl wget
+
+      - name: Run pingerr.sh and check output for errors
+        run: |
+          SCRIPT=pingerr.sh
+          OUT=run-output-pingerr_sh.txt
+
+          if [ ! -f "$SCRIPT" ]; then
+            echo "$SCRIPT not found in repository root"
+            exit 1
+          fi
+
+          chmod +x "$SCRIPT" || true
+          ./"$SCRIPT" > "$OUT" 2>&1
+          rc=$?
+
+          echo "---- $SCRIPT OUTPUT (begin) ----"
+          cat "$OUT"
+          echo "---- $SCRIPT OUTPUT (end) ----"
+
+          if [ $rc -ne 0 ]; then
+            echo "Script $SCRIPT exited with non-zero status: $rc"
+            exit $rc
+          fi
+
+          if grep -i -nE '\b(error|failed|failure|exception)\b' "$OUT"; then
+            echo "Error-like keywords found in $SCRIPT output"
+            exit 1
+          fi
+
+          echo "$SCRIPT completed successfully and no error keywords found."
+
+      - name: Upload pingerr.sh log artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pingerr-sh-run-output
+          path: run-output-pingerr_sh.txt
