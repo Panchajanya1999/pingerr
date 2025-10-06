@@ -1,0 +1,106 @@
+# CircleCI configuration for Pingerr
+# Runs pingerr_ash.sh and pingerr.sh on Alpine Linux
+version: 2.1
+
+# Define jobs
+jobs:
+  pingerr_ash:
+    # Use Alpine Linux Docker image
+    docker:
+      - image: alpine:3.18
+
+    steps:
+      - checkout
+
+      - run:
+          name: Install required tools (dig, curl, wget)
+          command: |
+            apk add --no-cache bind-tools curl wget
+
+      - run:
+          name: Run pingerr_ash.sh
+          command: |
+            SCRIPT=pingerr_ash.sh
+            OUT=run-output-pingerr_ash.txt
+
+            if [ ! -f "$SCRIPT" ]; then
+              echo "$SCRIPT not found in repository root"
+              exit 1
+            fi
+
+            chmod +x "$SCRIPT" || true
+            sh "$SCRIPT" > "$OUT" 2>&1
+            rc=$?
+
+            echo "---- $SCRIPT OUTPUT (begin) ----"
+            cat "$OUT"
+            echo "---- $SCRIPT OUTPUT (end) ----"
+
+            if [ $rc -ne 0 ]; then
+              echo "Script $SCRIPT exited with non-zero status: $rc"
+              exit $rc
+            fi
+
+            echo "$SCRIPT completed successfully."
+
+      - store_artifacts:
+          path: run-output-pingerr_ash.txt
+          destination: pingerr-ash-run-output
+
+  pingerr_sh:
+    # Use Alpine Linux Docker image
+    docker:
+      - image: alpine:3.18
+
+    steps:
+      - checkout
+
+      - run:
+          name: Install required tools (bash, dig, curl, wget)
+          command: |
+            apk add --no-cache bash bind-tools curl wget
+
+      - run:
+          name: Run pingerr.sh
+          command: |
+            SCRIPT=pingerr.sh
+            OUT=run-output-pingerr_sh.txt
+
+            if [ ! -f "$SCRIPT" ]; then
+              echo "$SCRIPT not found in repository root"
+              exit 1
+            fi
+
+            chmod +x "$SCRIPT" || true
+            ./"$SCRIPT" > "$OUT" 2>&1
+            rc=$?
+
+            echo "---- $SCRIPT OUTPUT (begin) ----"
+            cat "$OUT"
+            echo "---- $SCRIPT OUTPUT (end) ----"
+
+            if [ $rc -ne 0 ]; then
+              echo "Script $SCRIPT exited with non-zero status: $rc"
+              exit $rc
+            fi
+
+            echo "$SCRIPT completed successfully."
+
+      - store_artifacts:
+          path: run-output-pingerr_sh.txt
+          destination: pingerr-sh-run-output
+
+# Orchestrate jobs using workflows
+workflows:
+  pingerr-ci:
+    jobs:
+      - pingerr_ash:
+          filters:
+            branches:
+              only:
+                - master
+      - pingerr_sh:
+          filters:
+            branches:
+              only:
+                - master
