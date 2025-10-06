@@ -198,6 +198,24 @@ Yandex-Secondary-v6|2a02:6b8:0:1::feed:0ff
 Yandex-Safe-Primary-v6|2a02:6b8::feed:bad
 Yandex-Safe-Secondary-v6|2a02:6b8:0:1::feed:bad
 Hurricane-Electric-v6|2001:470:20::2
+Freenom-Primary-v6|2a02:fe80:1010::1
+Freenom-Secondary-v6|2a02:fe80:1010::2
+OpenNIC-Primary-v6|2a05:dfc7:5::53
+OpenNIC-Secondary-v6|2a05:dfc7:5::5353
+Restena-v6|2001:a18:1::29
+DNS-for-Family-Primary-v6|2a01:4f8:151:64e6::225
+DNS-for-Family-Secondary-v6|2a01:4f8:141:316d::161
+CleanBrowsing-Security-v6|2a0d:2a00:3::
+CleanBrowsing-Adult-v6|2a0d:2a00:1::2
+CleanBrowsing-Family-Secondary-v6|2a0d:2a00:2::2
+IIJ-Primary-v6|2001:240:bb8a:10::1
+IIJ-Secondary-v6|2001:240:bb8a:20::1
+Comodo-Primary-v6|2606:4700:50::adf5:6f3
+Comodo-Secondary-v6|2606:4700:50::adf5:6f4
+Neustar-Primary-v6|2620:74:1b::1:1
+Neustar-Secondary-v6|2620:74:1c::2:2
+Verisign-Primary-v6|2620:74:1b::1:1
+Verisign-Secondary-v6|2620:74:1c::2:2
 "
 
 # Merge DNS servers based on IPv6 availability
