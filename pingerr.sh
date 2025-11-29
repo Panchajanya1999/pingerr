@@ -156,6 +156,8 @@ declare -A DNS_SERVERS_IPV4=(
     ["Freenom"]="80.80.80.80"
     ["Level3-Primary"]="209.244.0.3"
     ["Level3-Secondary"]="209.244.0.4"
+    ["DNS4IN-Primary"]="143.110.176.185"
+    ["DNS4IN-Secondary"]="68.183.246.1661"
 )
 
 # DNS Servers to test (IPv6)
@@ -221,6 +223,8 @@ declare -A DNS_SERVERS_IPV6=(
     ["Comodo-Secondary-v6"]="2606:4700:50::adf5:6f4"
     ["Neustar-Primary-v6"]="2620:74:1b::1:1"
     ["Neustar-Secondary-v6"]="2620:74:1c::2:2"
+    ["DNS4IN-Primary-v6"]="2400:6180:100:d0::c592:1001"
+    ["DNS4IN-Secondary-v6"]="2400:6180:100:D0::C7E3:6001"
 )
 
 # Merge DNS servers based on IPv6 availability
