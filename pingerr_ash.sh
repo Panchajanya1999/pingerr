@@ -26,6 +26,7 @@ IPV6_ONLY=0
 SKIP_PING=0
 NO_COLOR=0
 TEST_COUNT=5
+TEST_DOMAIN="google.com"
 
 # Help function
 show_help() {
@@ -35,6 +36,7 @@ show_help() {
     printf '  -4, --ipv4-only     Test only IPv4 DNS servers\n'
     printf '  -6, --ipv6-only     Test only IPv6 DNS servers (requires IPv6 connectivity)\n'
     printf '  -n, --count N       Number of tests per server (default: 5)\n'
+    printf '  -d, --domain NAME   Domain/IP to use for DNS queries (default: google.com)\n'
     printf '  -q, --quick         Quick mode (3 tests per server)\n'
     printf '  --no-ping           Skip ping correlation test\n'
     printf '  --no-color          Disable colored output\n'
@@ -44,6 +46,7 @@ show_help() {
     printf '  %s              # Run full test (IPv4 + IPv6 if available)\n' "$(basename "$0")"
     printf '  %s -4           # Test only IPv4 servers\n' "$(basename "$0")"
     printf '  %s -q           # Quick test with fewer iterations\n' "$(basename "$0")"
+    printf '  %s -d github.com # Use github.com for DNS queries\n' "$(basename "$0")"
     printf '  %s --no-ping    # Skip ping correlation analysis\n\n' "$(basename "$0")"
     exit 0
 }
@@ -77,6 +80,22 @@ while [ $# -gt 0 ]; do
         -q|--quick)
             TEST_COUNT=3
             shift
+            ;;
+        -d|--domain)
+            if [ -n "$2" ]; then
+                # Validate: must be a single domain/IP (no spaces)
+                case "$2" in
+                    *" "*|*"	"*)
+                        printf 'Error: --domain requires a single domain or IP (no spaces)\n'
+                        exit 1
+                        ;;
+                esac
+                TEST_DOMAIN=$2
+                shift 2
+            else
+                printf 'Error: --domain requires a domain name or IP address\n'
+                exit 1
+            fi
             ;;
         --no-ping)
             SKIP_PING=1
@@ -122,15 +141,6 @@ else
     CYAN=$(printf '\033[0;36m')
     NC=$(printf '\033[0m') # No Color
 fi
-
-# Test domains (popular sites for comprehensive testing)
-TEST_DOMAINS="google.com youtube.com facebook.com instagram.com chatgpt.com x.com whatsapp.com reddit.com wikipedia.org amazon.com tiktok.com pinterest.com cloudflare.com github.com netflix.com"
-
-# Convert to list for counting
-# shellcheck disable=SC2086
-# Note: $TEST_DOMAINS intentionally unquoted to split into array
-set -- $TEST_DOMAINS
-TEST_DOMAIN_COUNT=$#
 
 # Check for IPv6 connectivity
 check_ipv6_connectivity() {
@@ -355,20 +365,6 @@ count_dns_servers() {
     echo "$DNS_SERVERS" | grep -c -v "^$"
 }
 
-# Function to get nth test domain
-get_test_domain() {
-    local index=$1
-    local count=0
-    for domain in $TEST_DOMAINS; do
-        count=$((count + 1))
-        if [ $count -eq "$index" ]; then
-            echo "$domain"
-            return
-        fi
-    done
-    echo "google.com"  # fallback
-}
-
 # Function to test DNS response time
 test_dns() {
     local dns_server=$1
@@ -485,7 +481,7 @@ echo ""
 printf 'Total DNS Servers: %s (IPv4: %s, IPv6: %s)\n' "${DNS_COUNT}" "${DNS_IPV4_COUNT}" "${DNS_IPV6_COUNT}"
 printf 'Tests per server: %s\n' "${TEST_COUNT}"
 printf 'Total tests to run: %s\n' "${total_tests}"
-printf 'Test domains: %s popular websites\n' "${TEST_DOMAIN_COUNT}"
+printf 'Test domain: %s\n' "${TEST_DOMAIN}"
 echo ""
 printf '%bThis will take a few minutes to complete...%s\n' "${YELLOW}" "${NC}"
 echo ""
@@ -525,17 +521,16 @@ echo "$DNS_SERVERS" | grep -v "^$" | while IFS='|' read -r dns_name dns_ip; do
         printf "[%3d/%3d] Testing %-35s (%s) ... \n" "$current" "$total" "$dns_name" "$dns_ip"
 
         # Store results for this DNS server
+        # Run a warmup query to prime the cache (prevents first-query bias)
+        test_dns "$dns_ip" "$TEST_DOMAIN" >/dev/null
+
         times=""
         failed=0
 
-        # Test multiple times with different domains
+        # Test multiple times with the same domain (measures cached response time)
         i=1
         while [ $i -le $TEST_COUNT ]; do
-            # Rotate through test domains
-            domain_index=$(( (i - 1) % TEST_DOMAIN_COUNT + 1 ))
-            domain=$(get_test_domain $domain_index)
-
-            response_time=$(test_dns "$dns_ip" "$domain")
+            response_time=$(test_dns "$dns_ip" "$TEST_DOMAIN")
 
             if [ "$response_time" = "0" ] || [ -z "$response_time" ]; then
                 failed=$((failed + 1))

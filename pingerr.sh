@@ -26,6 +26,7 @@ IPV6_ONLY=0
 SKIP_PING=0
 NO_COLOR=0
 TEST_COUNT=5
+TEST_DOMAIN="google.com"
 
 # Help function
 show_help() {
@@ -38,6 +39,7 @@ Options:
   -4, --ipv4-only     Test only IPv4 DNS servers
   -6, --ipv6-only     Test only IPv6 DNS servers (requires IPv6 connectivity)
   -n, --count N       Number of tests per server (default: 5)
+  -d, --domain NAME   Domain/IP to use for DNS queries (default: google.com)
   -q, --quick         Quick mode (3 tests per server)
   --no-ping           Skip ping correlation test
   --no-color          Disable colored output
@@ -48,6 +50,7 @@ Examples:
   $(basename "$0")              # Run full test (IPv4 + IPv6 if available)
   $(basename "$0") -4           # Test only IPv4 servers
   $(basename "$0") -q           # Quick test with fewer iterations
+  $(basename "$0") -d github.com # Use github.com for DNS queries
   $(basename "$0") --no-ping    # Skip ping correlation analysis
 
 EOF
@@ -83,6 +86,22 @@ while [ $# -gt 0 ]; do
         -q|--quick)
             TEST_COUNT=3
             shift
+            ;;
+        -d|--domain)
+            if [ -n "$2" ]; then
+                # Validate: must be a single domain/IP (no spaces)
+                case "$2" in
+                    *" "*|*"	"*)
+                        echo "Error: --domain requires a single domain or IP (no spaces)"
+                        exit 1
+                        ;;
+                esac
+                TEST_DOMAIN=$2
+                shift 2
+            else
+                echo "Error: --domain requires a domain name or IP address"
+                exit 1
+            fi
             ;;
         --no-ping)
             SKIP_PING=1
@@ -128,25 +147,6 @@ else
     CYAN=$(printf '\033[0;36m')
     NC=$(printf '\033[0m') # No Color
 fi
-
-# Test domains (popular sites for comprehensive testing)
-TEST_DOMAINS=(
-    "google.com"
-    "youtube.com"
-    "facebook.com"
-    "instagram.com"
-    "chatgpt.com"
-    "x.com"
-    "whatsapp.com"
-    "reddit.com"
-    "wikipedia.org"
-    "amazon.com"
-    "tiktok.com"
-    "pinterest.com"
-    "cloudflare.com"
-    "github.com"
-    "netflix.com"
-)
 
 # Check for IPv6 connectivity
 check_ipv6_connectivity() {
@@ -568,7 +568,7 @@ echo ""
 echo -e "Total DNS Servers: ${total_servers} (IPv4: ${#DNS_NAMES_IPV4[@]}, IPv6: ${#DNS_NAMES_IPV6[@]})"
 echo -e "Tests per server: ${TEST_COUNT}"
 echo -e "Total tests to run: ${total_tests}"
-echo -e "Test domains: ${#TEST_DOMAINS[@]} popular websites"
+echo -e "Test domain: ${TEST_DOMAIN}"
 echo ""
 echo -e "${YELLOW}This will take a few minutes to complete...${NC}"
 echo ""
@@ -602,17 +602,16 @@ for i in "${!DNS_NAMES[@]}"; do
         # Progress indicator
         printf "[%3d/%3d] Testing %-35s (%s) ... \n" "$current" "$total" "$dns_name" "$dns_ip"
 
+        # Run a warmup query to prime the cache (prevents first-query bias)
+        test_dns "$dns_ip" "$TEST_DOMAIN" >/dev/null
+
         # Store results for this DNS server
         times=""
         failed=0
 
-        # Test multiple times with different domains
+        # Test multiple times with the same domain (measures cached response time)
         for j in $(seq 1 $TEST_COUNT); do
-            # Rotate through test domains
-            domain_index=$(( (j - 1) % ${#TEST_DOMAINS[@]} ))
-            domain="${TEST_DOMAINS[$domain_index]}"
-
-            response_time=$(test_dns "$dns_ip" "$domain")
+            response_time=$(test_dns "$dns_ip" "$TEST_DOMAIN")
 
             if [ "$response_time" == "0" ] || [ -z "$response_time" ]; then
                 failed=$((failed + 1))
