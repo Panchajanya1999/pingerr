@@ -611,19 +611,15 @@ for i in "${!DNS_NAMES[@]}"; do
         printf "[%3d/%3d] Testing %-35s (%s) ... \n" "$current" "$total" "$dns_name" "$dns_ip"
 
         # Run a warmup query to prime the cache (prevents first-query bias)
-        warmup_dns "$dns_ip" "google.com"
+        warmup_dns "$dns_ip" "1.1.1.1"
 
         # Store results for this DNS server
         times=""
         failed=0
 
-        # Test multiple times with different domains
+        # Test multiple times with the same target (consistent measurement)
         for j in $(seq 1 $TEST_COUNT); do
-            # Rotate through test domains
-            domain_index=$(( (j - 1) % ${#TEST_DOMAINS[@]} ))
-            domain="${TEST_DOMAINS[$domain_index]}"
-
-            response_time=$(test_dns "$dns_ip" "$domain")
+            response_time=$(test_dns "$dns_ip" "1.1.1.1")
 
             if [ "$response_time" == "0" ] || [ -z "$response_time" ]; then
                 failed=$((failed + 1))

@@ -533,20 +533,16 @@ echo "$DNS_SERVERS" | grep -v "^$" | while IFS='|' read -r dns_name dns_ip; do
         printf "[%3d/%3d] Testing %-35s (%s) ... \n" "$current" "$total" "$dns_name" "$dns_ip"
 
         # Run a warmup query to prime the cache (prevents first-query bias)
-        warmup_dns "$dns_ip" "google.com"
+        warmup_dns "$dns_ip" "1.1.1.1"
 
         # Store results for this DNS server
         times=""
         failed=0
 
-        # Test multiple times with different domains
+        # Test multiple times with the same target (consistent measurement)
         i=1
         while [ $i -le $TEST_COUNT ]; do
-            # Rotate through test domains
-            domain_index=$(( (i - 1) % TEST_DOMAIN_COUNT + 1 ))
-            domain=$(get_test_domain $domain_index)
-
-            response_time=$(test_dns "$dns_ip" "$domain")
+            response_time=$(test_dns "$dns_ip" "1.1.1.1")
 
             if [ "$response_time" = "0" ] || [ -z "$response_time" ]; then
                 failed=$((failed + 1))
