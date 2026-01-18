@@ -426,19 +426,57 @@ calculate_average() {
     local sum=0
     local count=0
     local val
-    
+
     for val in "$@"; do
         if [ "$val" != "0" ] && [ "$val" != "" ]; then
             sum=$((sum + val))
             count=$((count + 1))
         fi
     done
-    
+
     if [ $count -eq 0 ]; then
         echo "9999"  # Return high value for failed tests
     else
         echo $((sum / count))
     fi
+}
+
+# Function to calculate median (POSIX-compatible, more robust than average)
+calculate_median() {
+    local temp_file="/tmp/median_$$"
+    local count=0
+    local val
+
+    # Write non-zero values to temp file for sorting
+    : > "$temp_file"
+    for val in "$@"; do
+        if [ "$val" != "0" ] && [ "$val" != "" ]; then
+            echo "$val" >> "$temp_file"
+            count=$((count + 1))
+        fi
+    done
+
+    if [ $count -eq 0 ]; then
+        rm -f "$temp_file"
+        echo "9999"
+        return
+    fi
+
+    # Sort and get median
+    sort -n "$temp_file" > "${temp_file}.sorted"
+    local mid=$((count / 2))
+
+    if [ $((count % 2)) -eq 0 ]; then
+        # Even count: average of two middle values
+        local val1=$(sed -n "${mid}p" "${temp_file}.sorted")
+        local val2=$(sed -n "$((mid + 1))p" "${temp_file}.sorted")
+        echo $(( (val1 + val2) / 2 ))
+    else
+        # Odd count: middle value
+        sed -n "$((mid + 1))p" "${temp_file}.sorted"
+    fi
+
+    rm -f "$temp_file" "${temp_file}.sorted"
 }
 
 # Function to test ping latency (works for both IPv4 and IPv6)
@@ -540,7 +578,8 @@ echo "$DNS_SERVERS" | grep -v "^$" | while IFS='|' read -r dns_name dns_ip; do
         else
             # shellcheck disable=SC2086
             # Note: $times intentionally unquoted - it contains space-separated values
-            avg=$(calculate_average $times)
+            # Use median for more robust measurement (less affected by outliers)
+            avg=$(calculate_median $times)
             echo "SUCCESS|$dns_name|$avg|$dns_ip" > "$temp_file"
             printf "[%3d/%3d] %-35s (%s): ${GREEN}%4d ms${NC}\n" "$current" "$total" "$dns_name" "$dns_ip" "$avg"
         fi
@@ -595,7 +634,7 @@ echo ""
 if [ -f "$RESULTS_FILE" ] && [ -s "$RESULTS_FILE" ]; then
     printf '%bIPv4 DNS Servers Ranked by Speed:%s\n' "${GREEN}" "${NC}"
     printf '+------+--------------------------------------+-------------------------------------+-----------+\n'
-    printf '| Rank | DNS Server                           | IP Address                          | Avg Time  |\n'
+    printf '| Rank | DNS Server                           | IP Address                          | Median    |\n'
     printf '+------+--------------------------------------+-------------------------------------+-----------+\n'
     
     # Sort results to temp file to avoid subshell variable scope issue
@@ -638,7 +677,7 @@ if [ $IPV6_ENABLED -eq 1 ]; then
     if [ -f "$RESULTS_FILE" ] && [ -s "$RESULTS_FILE" ]; then
         printf '%bIPv6 DNS Servers Ranked by Speed:%s\n' "${GREEN}" "${NC}"
         printf '+------+--------------------------------------+-------------------------------------+-----------+\n'
-        printf '| Rank | DNS Server                           | IP Address                          | Avg Time  |\n'
+        printf '| Rank | DNS Server                           | IP Address                          | Median    |\n'
         printf '+------+--------------------------------------+-------------------------------------+-----------+\n'
         
         rank=1
@@ -707,7 +746,7 @@ if [ -f "$RESULTS_FILE" ] && [ -s "$RESULTS_FILE" ]; then
         printf '%b========================================================================%b\n' "${BLUE}" "${NC}"
         printf '%b[BEST] BEST DNS SERVER OVERALL: %s%b\n' "${GREEN}" "$name" "${NC}"
         printf '       IP Address: %s\n' "$ip"
-        printf '       Average Response Time: %b%s ms%b\n' "${GREEN}" "$avg" "${NC}"
+        printf '       Median Response Time: %b%s ms%b\n' "${GREEN}" "$avg" "${NC}"
         printf '%b========================================================================%b\n' "${BLUE}" "${NC}"
         echo ""
     fi
@@ -725,7 +764,7 @@ if [ -f "$RESULTS_FILE" ] && [ -s "$RESULTS_FILE" ]; then
         ip=$(echo "$best_ipv4" | cut -d'|' -f3)
         printf '%b[#1] BEST IPv4 DNS SERVER: %s%b\n' "${GREEN}" "$name" "${NC}"
         printf '     IP Address: %s\n' "$ip"
-        printf '     Average Response Time: %b%s ms%b\n' "${GREEN}" "$avg" "${NC}"
+        printf '     Median Response Time: %b%s ms%b\n' "${GREEN}" "$avg" "${NC}"
         echo ""
     fi
     
@@ -743,7 +782,7 @@ if [ -f "$RESULTS_FILE" ] && [ -s "$RESULTS_FILE" ]; then
             ip=$(echo "$best_ipv6" | cut -d'|' -f3)
             printf '%b[#1] BEST IPv6 DNS SERVER: %s%b\n' "${GREEN}" "$name" "${NC}"
             printf '     IP Address: %s\n' "$ip"
-            printf '     Average Response Time: %b%s ms%b\n' "${GREEN}" "$avg" "${NC}"
+            printf '     Median Response Time: %b%s ms%b\n' "${GREEN}" "$avg" "${NC}"
             echo ""
         fi
     fi
