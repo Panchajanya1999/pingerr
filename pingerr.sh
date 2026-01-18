@@ -1,5 +1,7 @@
 #!/bin/bash
 
+VERSION="1.0.0"
+
 # Copyright 2025 Panchajanya1999
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,16 +20,114 @@
 # Tests multiple DNS providers (IPv4 and IPv6) and finds the fastest one
 # Compatible with Bash 3.2+ (macOS), Bash 4+ (Linux), and zsh
 
-# Color codes for output
-RED=$(printf '\033[0;31m')
-GREEN=$(printf '\033[0;32m')
-YELLOW=$(printf '\033[1;33m')
-BLUE=$(printf '\033[0;34m')
-CYAN=$(printf '\033[0;36m')
-NC=$(printf '\033[0m') # No Color
-
-# Number of tests per DNS server
+# Default settings
+IPV4_ONLY=0
+IPV6_ONLY=0
+SKIP_PING=0
+NO_COLOR=0
 TEST_COUNT=5
+
+# Help function
+show_help() {
+    cat << EOF
+Pingerr - DNS Speed Test Tool v${VERSION}
+
+Usage: $(basename "$0") [OPTIONS]
+
+Options:
+  -4, --ipv4-only     Test only IPv4 DNS servers
+  -6, --ipv6-only     Test only IPv6 DNS servers (requires IPv6 connectivity)
+  -n, --count N       Number of tests per server (default: 5)
+  -q, --quick         Quick mode (3 tests per server)
+  --no-ping           Skip ping correlation test
+  --no-color          Disable colored output
+  -h, --help          Show this help message
+  -v, --version       Show version
+
+Examples:
+  $(basename "$0")              # Run full test (IPv4 + IPv6 if available)
+  $(basename "$0") -4           # Test only IPv4 servers
+  $(basename "$0") -q           # Quick test with fewer iterations
+  $(basename "$0") --no-ping    # Skip ping correlation analysis
+
+EOF
+    exit 0
+}
+
+# Show version
+show_version() {
+    echo "Pingerr v${VERSION}"
+    exit 0
+}
+
+# Parse command line arguments
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -4|--ipv4-only)
+            IPV4_ONLY=1
+            shift
+            ;;
+        -6|--ipv6-only)
+            IPV6_ONLY=1
+            shift
+            ;;
+        -n|--count)
+            if [ -n "$2" ] && [ "$2" -eq "$2" ] 2>/dev/null; then
+                TEST_COUNT=$2
+                shift 2
+            else
+                echo "Error: --count requires a numeric argument"
+                exit 1
+            fi
+            ;;
+        -q|--quick)
+            TEST_COUNT=3
+            shift
+            ;;
+        --no-ping)
+            SKIP_PING=1
+            shift
+            ;;
+        --no-color)
+            NO_COLOR=1
+            shift
+            ;;
+        -h|--help)
+            show_help
+            ;;
+        -v|--version)
+            show_version
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Use --help for usage information"
+            exit 1
+            ;;
+    esac
+done
+
+# Validate conflicting options
+if [ $IPV4_ONLY -eq 1 ] && [ $IPV6_ONLY -eq 1 ]; then
+    echo "Error: Cannot use --ipv4-only and --ipv6-only together"
+    exit 1
+fi
+
+# Color codes for output
+if [ $NO_COLOR -eq 1 ]; then
+    RED=""
+    GREEN=""
+    YELLOW=""
+    BLUE=""
+    CYAN=""
+    NC=""
+else
+    RED=$(printf '\033[0;31m')
+    GREEN=$(printf '\033[0;32m')
+    YELLOW=$(printf '\033[1;33m')
+    BLUE=$(printf '\033[0;34m')
+    CYAN=$(printf '\033[0;36m')
+    NC=$(printf '\033[0m') # No Color
+fi
 
 # Test domains (popular sites for comprehensive testing)
 TEST_DOMAINS=(
@@ -76,9 +176,21 @@ check_ipv6_connectivity() {
     fi
 }
 
-# IPv6 support flag
+# IPv6 support flag - respect CLI options
 IPV6_ENABLED=0
-check_ipv6_connectivity && IPV6_ENABLED=1
+if [ $IPV4_ONLY -eq 1 ]; then
+    echo -e "${YELLOW}IPv4-only mode enabled - skipping IPv6 tests${NC}"
+    echo ""
+elif [ $IPV6_ONLY -eq 1 ]; then
+    if check_ipv6_connectivity; then
+        IPV6_ENABLED=1
+    else
+        echo -e "${RED}Error: IPv6-only mode requested but IPv6 is not available${NC}"
+        exit 1
+    fi
+else
+    check_ipv6_connectivity && IPV6_ENABLED=1
+fi
 
 # DNS Servers to test (IPv4) - Using parallel arrays for Bash 3.2 compatibility
 DNS_NAMES_IPV4=(
@@ -372,24 +484,32 @@ DNS_IPS_IPV6=(
     "2401:c080:3400:29e1:5400:05ff:fee0:fab4"
 )
 
-# Build combined DNS server arrays based on IPv6 availability
+# Build combined DNS server arrays based on CLI options and IPv6 availability
 DNS_NAMES=()
 DNS_IPS=()
 
-# Add IPv4 servers
-for i in "${!DNS_NAMES_IPV4[@]}"; do
-    DNS_NAMES+=("${DNS_NAMES_IPV4[$i]}")
-    DNS_IPS+=("${DNS_IPS_IPV4[$i]}")
-done
+# Add IPv4 servers (unless IPv6-only mode)
+if [ $IPV6_ONLY -eq 0 ]; then
+    for i in "${!DNS_NAMES_IPV4[@]}"; do
+        DNS_NAMES+=("${DNS_NAMES_IPV4[$i]}")
+        DNS_IPS+=("${DNS_IPS_IPV4[$i]}")
+    done
+fi
 
-# Add IPv6 servers if enabled
-if [ $IPV6_ENABLED -eq 1 ]; then
+# Add IPv6 servers if enabled (and not IPv4-only mode)
+if [ $IPV6_ENABLED -eq 1 ] && [ $IPV4_ONLY -eq 0 ]; then
     echo -e "${GREEN}IPv6 is enabled - including IPv6 DNS servers in tests${NC}"
     echo ""
     for i in "${!DNS_NAMES_IPV6[@]}"; do
         DNS_NAMES+=("${DNS_NAMES_IPV6[$i]}")
         DNS_IPS+=("${DNS_IPS_IPV6[$i]}")
     done
+elif [ $IPV4_ONLY -eq 1 ]; then
+    echo -e "${YELLOW}IPv4-only mode - testing IPv4 DNS servers only${NC}"
+    echo ""
+elif [ $IPV6_ONLY -eq 1 ]; then
+    echo -e "${CYAN}IPv6-only mode - testing IPv6 DNS servers only${NC}"
+    echo ""
 else
     echo -e "${YELLOW}IPv6 is disabled - testing IPv4 DNS servers only${NC}"
     echo ""
@@ -794,6 +914,14 @@ fi
 echo -e "${BLUE}═══════════════════════════════════════════════════════════════════════════════════════════════════════════════${NC}"
 
 # DNS-PING CORRELATION TEST
+if [ $SKIP_PING -eq 1 ]; then
+    echo ""
+    echo -e "${YELLOW}Skipping ping correlation test (--no-ping specified)${NC}"
+    echo ""
+    echo -e "${YELLOW}Analysis complete!${NC}"
+    exit 0
+fi
+
 echo ""
 echo ""
 echo -e "${BLUE}═══════════════════════════════════════════════════════════════════════════════════════════════════════════════${NC}"
