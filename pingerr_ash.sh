@@ -117,8 +117,8 @@ Foundation-Applied-Privacy2|37.252.185.232
 Restena|158.64.1.29
 DNS-for-Family-Primary|94.130.180.225
 DNS-for-Family-Secondary|78.47.64.161
-Canadian-Shield-Primary|149.112.121.10
-Canadian-Shield-Secondary|149.112.122.10
+Canadian-Shield-Private-Primary|149.112.121.20
+Canadian-Shield-Private-Secondary|149.112.122.20
 Digitale-Gesellschaft-Primary|185.95.218.42
 Digitale-Gesellschaft-Secondary|185.95.218.43
 Switch-Primary|130.59.31.248
