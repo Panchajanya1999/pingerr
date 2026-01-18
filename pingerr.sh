@@ -582,6 +582,35 @@ calculate_average() {
     fi
 }
 
+# Function to calculate median (more robust than average for latency)
+calculate_median() {
+    local values=()
+    for val in "$@"; do
+        if [ "$val" != "0" ]; then
+            values+=("$val")
+        fi
+    done
+
+    local count=${#values[@]}
+    if [ $count -eq 0 ]; then
+        echo "9999"
+        return
+    fi
+
+    # Sort the values
+    IFS=$'\n' sorted=($(sort -n <<<"${values[*]}")); unset IFS
+
+    # Calculate median
+    local mid=$((count / 2))
+    if [ $((count % 2)) -eq 0 ]; then
+        # Even count: average of two middle values
+        echo $(( (sorted[mid-1] + sorted[mid]) / 2 ))
+    else
+        # Odd count: middle value
+        echo "${sorted[mid]}"
+    fi
+}
+
 # Function to check if DNS is IPv6
 is_ipv6_dns() {
     local dns_name=$1
@@ -663,7 +692,8 @@ for i in "${!DNS_NAMES[@]}"; do
         else
             # shellcheck disable=SC2086
             # Note: $times intentionally unquoted - it contains space-separated values
-            avg=$(calculate_average $times)
+            # Use median for more robust measurement (less affected by outliers)
+            avg=$(calculate_median $times)
             printf "[%3d/%3d] %-35s (%s): ${GREEN}%4d ms${NC}\n" "$current" "$total" "$dns_name" "$dns_ip" "$avg"
             echo "SUCCESS|$dns_name|$avg|$dns_ip" > "$dns_temp_file"
         fi
@@ -722,7 +752,7 @@ echo -e "${CYAN}╚════════════════════�
 echo ""
 echo -e "${GREEN}IPv4 DNS Servers Ranked by Speed:${NC}"
 echo -e "┌──────┬──────────────────────────────────────┬─────────────────────────────────────┬───────────┐"
-echo -e "│ Rank │ DNS Server                           │ IP Address                          │ Avg Time  │"
+echo -e "│ Rank │ DNS Server                           │ IP Address                          │ Median    │"
 echo -e "├──────┼──────────────────────────────────────┼─────────────────────────────────────┼───────────┤"
 
 rank=1
@@ -760,7 +790,7 @@ if [ $IPV6_ENABLED -eq 1 ]; then
     echo ""
     echo -e "${GREEN}IPv6 DNS Servers Ranked by Speed:${NC}"
     echo -e "┌──────┬──────────────────────────────────────┬─────────────────────────────────────┬───────────┐"
-    echo -e "│ Rank │ DNS Server                           │ IP Address                          │ Avg Time  │"
+    echo -e "│ Rank │ DNS Server                           │ IP Address                          │ Median    │"
     echo -e "├──────┼──────────────────────────────────────┼─────────────────────────────────────┼───────────┤"
 
     rank=1
@@ -835,7 +865,7 @@ if [ -n "$best_dns" ]; then
     echo -e "${BLUE}═══════════════════════════════════════════════════════════════════════════════════════════════════════════════${NC}"
     echo -e "${GREEN}🏆 BEST DNS SERVER OVERALL: $name${NC}"
     echo -e "   IP Address: $ip"
-    echo -e "   Average Response Time: ${GREEN}$avg ms${NC}"
+    echo -e "   Median Response Time: ${GREEN}$avg ms${NC}"
     echo -e "${BLUE}═══════════════════════════════════════════════════════════════════════════════════════════════════════════════${NC}"
     echo ""
 fi
@@ -844,7 +874,7 @@ if [ -n "$best_ipv4" ]; then
     IFS='|' read -r avg name ip <<< "$best_ipv4"
     echo -e "${GREEN}🥇 BEST IPv4 DNS SERVER: $name${NC}"
     echo -e "   IP Address: $ip"
-    echo -e "   Average Response Time: ${GREEN}$avg ms${NC}"
+    echo -e "   Median Response Time: ${GREEN}$avg ms${NC}"
     echo ""
 fi
 
@@ -852,7 +882,7 @@ if [ -n "$best_ipv6" ]; then
     IFS='|' read -r avg name ip <<< "$best_ipv6"
     echo -e "${GREEN}🥇 BEST IPv6 DNS SERVER: $name${NC}"
     echo -e "   IP Address: $ip"
-    echo -e "   Average Response Time: ${GREEN}$avg ms${NC}"
+    echo -e "   Median Response Time: ${GREEN}$avg ms${NC}"
     echo ""
 fi
 
