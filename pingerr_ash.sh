@@ -362,9 +362,11 @@ fi
 RESULTS_FILE="/tmp/dns_results_$$"
 FAILED_FILE="/tmp/dns_failed_$$"
 CORRELATION_FILE="/tmp/dns_correlation_$$"
+SORTED_RESULTS_FILE="/tmp/dns_sorted_$$"
+SORTED_CORR_FILE="/tmp/dns_corr_sorted_$$"
 
 # Clean up temp files on exit
-trap 'rm -f "$RESULTS_FILE" "$FAILED_FILE" "$CORRELATION_FILE"' EXIT
+trap 'rm -f "$RESULTS_FILE" "$FAILED_FILE" "$CORRELATION_FILE" "$SORTED_RESULTS_FILE" "$SORTED_CORR_FILE"' EXIT
 
 # Function to check if DNS is IPv6
 is_ipv6_dns() {
@@ -596,9 +598,12 @@ if [ -f "$RESULTS_FILE" ] && [ -s "$RESULTS_FILE" ]; then
     printf '| Rank | DNS Server                           | IP Address                          | Avg Time  |\n'
     printf '+------+--------------------------------------+-------------------------------------+-----------+\n'
     
+    # Sort results to temp file to avoid subshell variable scope issue
+    sort -t'|' -k2 -n $RESULTS_FILE > "$SORTED_RESULTS_FILE"
+
     rank=1
     ipv4_count=0
-    sort -t'|' -k2 -n $RESULTS_FILE | while IFS='|' read -r dns_name avg ip; do
+    while IFS='|' read -r dns_name avg ip; do
         if ! is_ipv6_dns "$dns_name"; then
             # Color code based on speed
             if [ "$avg" -lt 50 ]; then
@@ -608,13 +613,13 @@ if [ -f "$RESULTS_FILE" ] && [ -s "$RESULTS_FILE" ]; then
             else
                 time_color="${RED}"    # Slow
             fi
-            
+
             printf "| %-4d | %-36s | %-35s | ${time_color}%7d ms${NC} |\n" "$rank" "$dns_name" "$ip" "$avg"
             rank=$((rank + 1))
             ipv4_count=$((ipv4_count + 1))
         fi
-    done
-    
+    done < "$SORTED_RESULTS_FILE"
+
     if [ $ipv4_count -eq 0 ]; then
         printf '|      | No IPv4 DNS servers working          |                                     |           |\n'
     fi
@@ -638,7 +643,7 @@ if [ $IPV6_ENABLED -eq 1 ]; then
         
         rank=1
         ipv6_count=0
-        sort -t'|' -k2 -n $RESULTS_FILE | while IFS='|' read -r dns_name avg ip; do
+        while IFS='|' read -r dns_name avg ip; do
             if is_ipv6_dns "$dns_name"; then
                 # Color code based on speed
                 if [ "$avg" -lt 50 ]; then
@@ -648,13 +653,13 @@ if [ $IPV6_ENABLED -eq 1 ]; then
                 else
                     time_color="${RED}"    # Slow
                 fi
-                
+
                 printf "| %-4d | %-36s | %-35s | ${time_color}%7d ms${NC} |\n" "$rank" "$dns_name" "$ip" "$avg"
                 rank=$((rank + 1))
                 ipv6_count=$((ipv6_count + 1))
             fi
-        done
-        
+        done < "$SORTED_RESULTS_FILE"
+
         if [ $ipv6_count -eq 0 ]; then
             printf '|      | No IPv6 DNS servers working          |                                     |           |\n'
         fi
@@ -894,9 +899,12 @@ if [ -f "$RESULTS_FILE" ] && [ -s "$RESULTS_FILE" ]; then
     printf '| Rank | DNS Server                           | IP Address                          | DNS (ms) | Ping(ms) | Difference | Score        |\n'
     printf '+------+--------------------------------------+-------------------------------------+----------+----------+------------+--------------+\n'
     
+    # Sort correlation results to temp file to avoid subshell variable scope issue
+    sort -t'|' -k1 -n $CORRELATION_FILE > "$SORTED_CORR_FILE" 2>/dev/null
+
     rank=1
     ipv4_corr_count=0
-    sort -t'|' -k1 -n $CORRELATION_FILE 2>/dev/null | while IFS='|' read -r score dns_name dns_time ping_time ip; do
+    while IFS='|' read -r score dns_name dns_time ping_time ip; do
         if ! is_ipv6_dns "$dns_name"; then
             # Calculate difference
             if [ "$ping_time" = "9999" ]; then
@@ -906,7 +914,7 @@ if [ -f "$RESULTS_FILE" ] && [ -s "$RESULTS_FILE" ]; then
             else
                 diff=$((ping_time - dns_time))
                 ping_display="${ping_time}"
-                
+
                 # Color code the difference
                 if [ $diff -lt 0 ]; then
                     diff_color="${GREEN}"  # Ping faster than DNS (unusual but good)
@@ -918,7 +926,7 @@ if [ -f "$RESULTS_FILE" ] && [ -s "$RESULTS_FILE" ]; then
                     diff_color="${RED}"    # Poor correlation
                 fi
             fi
-            
+
             # Color code the score
             if [ "$score" -lt 50 ]; then
                 score_color="${GREEN}"  # Excellent
@@ -927,15 +935,15 @@ if [ -f "$RESULTS_FILE" ] && [ -s "$RESULTS_FILE" ]; then
             else
                 score_color="${RED}"    # Poor
             fi
-            
+
             printf "| %-4d | %-36s | %-35s | %8s | %8s | ${diff_color}%10s${NC} | ${score_color}%12d${NC} |\n" \
                    "$rank" "$dns_name" "$ip" "$dns_time" "$ping_display" "$diff" "$score"
-            
+
             rank=$((rank + 1))
             ipv4_corr_count=$((ipv4_corr_count + 1))
         fi
-    done
-    
+    done < "$SORTED_CORR_FILE"
+
     if [ $ipv4_corr_count -eq 0 ]; then
         printf '|      | No IPv4 DNS servers with ping data  |                                     |          |          |            |              |\n'
     fi
@@ -956,7 +964,7 @@ if [ -f "$RESULTS_FILE" ] && [ -s "$RESULTS_FILE" ]; then
         
         rank=1
         ipv6_corr_count=0
-        sort -t'|' -k1 -n $CORRELATION_FILE 2>/dev/null | while IFS='|' read -r score dns_name dns_time ping_time ip; do
+        while IFS='|' read -r score dns_name dns_time ping_time ip; do
             if is_ipv6_dns "$dns_name"; then
                 # Calculate difference
                 if [ "$ping_time" = "9999" ]; then
@@ -966,7 +974,7 @@ if [ -f "$RESULTS_FILE" ] && [ -s "$RESULTS_FILE" ]; then
                 else
                     diff=$((ping_time - dns_time))
                     ping_display="${ping_time}"
-                    
+
                     # Color code the difference
                     if [ $diff -lt 0 ]; then
                         diff_color="${GREEN}"  # Ping faster than DNS (unusual but good)
@@ -978,7 +986,7 @@ if [ -f "$RESULTS_FILE" ] && [ -s "$RESULTS_FILE" ]; then
                         diff_color="${RED}"    # Poor correlation
                     fi
                 fi
-                
+
                 # Color code the score
                 if [ "$score" -lt 50 ]; then
                     score_color="${GREEN}"  # Excellent
@@ -987,15 +995,15 @@ if [ -f "$RESULTS_FILE" ] && [ -s "$RESULTS_FILE" ]; then
                 else
                     score_color="${RED}"    # Poor
                 fi
-                
+
                 printf "| %-4d | %-36s | %-35s | %8s | %8s | ${diff_color}%10s${NC} | ${score_color}%12d${NC} |\n" \
                        "$rank" "$dns_name" "$ip" "$dns_time" "$ping_display" "$diff" "$score"
-                
+
                 rank=$((rank + 1))
                 ipv6_corr_count=$((ipv6_corr_count + 1))
             fi
-        done
-        
+        done < "$SORTED_CORR_FILE"
+
         if [ $ipv6_corr_count -eq 0 ]; then
             printf '|      | No IPv6 DNS servers with ping data  |                                     |          |          |            |              |\n'
         fi
