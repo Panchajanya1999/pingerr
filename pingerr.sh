@@ -716,7 +716,7 @@ echo -e "├──────┼───────────────�
 
 rank=1
 ipv4_count=0
-echo -e "$SORTED_RESULTS" | while IFS='|' read -r avg dns_name ip; do
+while IFS='|' read -r avg dns_name ip; do
     [ -z "$avg" ] && continue
     if ! is_ipv6_dns "$dns_name"; then
         # Color code based on speed
@@ -732,18 +732,9 @@ echo -e "$SORTED_RESULTS" | while IFS='|' read -r avg dns_name ip; do
         rank=$((rank + 1))
         ipv4_count=$((ipv4_count + 1))
     fi
-done
+done < <(echo -e "$SORTED_RESULTS")
 
-# Check if any IPv4 servers were displayed
-ipv4_displayed=$(echo -e "$SORTED_RESULTS" | while IFS='|' read -r avg dns_name ip; do
-    [ -z "$avg" ] && continue
-    if ! is_ipv6_dns "$dns_name"; then
-        echo "1"
-        break
-    fi
-done)
-
-if [ -z "$ipv4_displayed" ]; then
+if [ $ipv4_count -eq 0 ]; then
     echo -e "│      │ No IPv4 DNS servers working          │                                     │           │"
 fi
 
@@ -762,7 +753,8 @@ if [ $IPV6_ENABLED -eq 1 ]; then
     echo -e "├──────┼──────────────────────────────────────┼─────────────────────────────────────┼───────────┤"
 
     rank=1
-    echo -e "$SORTED_RESULTS" | while IFS='|' read -r avg dns_name ip; do
+    ipv6_count=0
+    while IFS='|' read -r avg dns_name ip; do
         [ -z "$avg" ] && continue
         if is_ipv6_dns "$dns_name"; then
             # Color code based on speed
@@ -776,19 +768,11 @@ if [ $IPV6_ENABLED -eq 1 ]; then
 
             printf "│ %-4d │ %-36s │ %-35s │ ${time_color}%7d ms${NC} │\n" "$rank" "$dns_name" "$ip" "$avg"
             rank=$((rank + 1))
+            ipv6_count=$((ipv6_count + 1))
         fi
-    done
+    done < <(echo -e "$SORTED_RESULTS")
 
-    # Check if any IPv6 servers were displayed
-    ipv6_displayed=$(echo -e "$SORTED_RESULTS" | while IFS='|' read -r avg dns_name ip; do
-        [ -z "$avg" ] && continue
-        if is_ipv6_dns "$dns_name"; then
-            echo "1"
-            break
-        fi
-    done)
-
-    if [ -z "$ipv6_displayed" ]; then
+    if [ $ipv6_count -eq 0 ]; then
         echo -e "│      │ No IPv6 DNS servers working          │                                     │           │"
     fi
 
@@ -1036,7 +1020,7 @@ echo -e "├──────┼───────────────�
 
 rank=1
 ipv4_corr_count=0
-echo -e "$CORR_SORTED" | while IFS='|' read -r score dns_name dns_time ping_time ip; do
+while IFS='|' read -r score dns_name dns_time ping_time ip; do
     [ -z "$score" ] && continue
     if ! is_ipv6_dns "$dns_name"; then
         # Calculate difference
@@ -1069,18 +1053,9 @@ echo -e "$CORR_SORTED" | while IFS='|' read -r score dns_name dns_time ping_time
         rank=$((rank + 1))
         ipv4_corr_count=$((ipv4_corr_count + 1))
     fi
-done
+done < <(echo -e "$CORR_SORTED")
 
-# Check if any IPv4 correlation results were displayed
-ipv4_corr_displayed=$(echo -e "$CORR_SORTED" | while IFS='|' read -r score dns_name dns_time ping_time ip; do
-    [ -z "$score" ] && continue
-    if ! is_ipv6_dns "$dns_name"; then
-        echo "1"
-        break
-    fi
-done)
-
-if [ -z "$ipv4_corr_displayed" ]; then
+if [ $ipv4_corr_count -eq 0 ]; then
     echo -e "│      │ No IPv4 DNS servers with ping data  │                                     │          │          │            │              │"
 fi
 
@@ -1099,7 +1074,8 @@ if [ $IPV6_ENABLED -eq 1 ]; then
     echo -e "├──────┼──────────────────────────────────────┼─────────────────────────────────────┼──────────┼──────────┼────────────┼──────────────┤"
 
     rank=1
-    echo -e "$CORR_SORTED" | while IFS='|' read -r score dns_name dns_time ping_time ip; do
+    ipv6_corr_count=0
+    while IFS='|' read -r score dns_name dns_time ping_time ip; do
         [ -z "$score" ] && continue
         if is_ipv6_dns "$dns_name"; then
             # Calculate difference
@@ -1130,19 +1106,11 @@ if [ $IPV6_ENABLED -eq 1 ]; then
                    "$rank" "$dns_name" "$ip" "$dns_time" "$ping_display" "$diff" "$score"
 
             rank=$((rank + 1))
+            ipv6_corr_count=$((ipv6_corr_count + 1))
         fi
-    done
+    done < <(echo -e "$CORR_SORTED")
 
-    # Check if any IPv6 correlation results were displayed
-    ipv6_corr_displayed=$(echo -e "$CORR_SORTED" | while IFS='|' read -r score dns_name dns_time ping_time ip; do
-        [ -z "$score" ] && continue
-        if is_ipv6_dns "$dns_name"; then
-            echo "1"
-            break
-        fi
-    done)
-
-    if [ -z "$ipv6_corr_displayed" ]; then
+    if [ $ipv6_corr_count -eq 0 ]; then
         echo -e "│      │ No IPv6 DNS servers with ping data  │                                     │          │          │            │              │"
     fi
 
