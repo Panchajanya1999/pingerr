@@ -402,7 +402,7 @@ test_dns() {
     local domain=$2
     local timeout=2
     local result=""
-    
+
     # Use dig to test DNS server (works for both IPv4 and IPv6)
     if command -v dig >/dev/null 2>&1; then
         result=$(dig @"${dns_server}" "${domain}" +noall +stats +time=${timeout} 2>/dev/null | grep "Query time:" | awk '{print $4}')
@@ -410,7 +410,7 @@ test_dns() {
         echo "0"
         return 1
     fi
-    
+
     # Return the time in ms, or 0 if failed
     if [ -z "$result" ]; then
         echo "0"
@@ -419,6 +419,14 @@ test_dns() {
         echo "$result"
         return 0
     fi
+}
+
+# Function to run a warmup query (primes the DNS cache)
+warmup_dns() {
+    local dns_server=$1
+    local domain=$2
+    # Run a query but discard the result - just to warm up the cache
+    dig @"${dns_server}" "${domain}" +noall +stats +time=2 >/dev/null 2>&1
 }
 
 # Function to calculate average
@@ -512,6 +520,9 @@ echo "$DNS_SERVERS" | grep -v "^$" | while IFS='|' read -r dns_name dns_ip; do
     {
         # Progress indicator
         printf "[%3d/%3d] Testing %-35s (%s) ... \n" "$current" "$total" "$dns_name" "$dns_ip"
+
+        # Run a warmup query to prime the cache (prevents first-query bias)
+        warmup_dns "$dns_ip" "google.com"
 
         # Store results for this DNS server
         times=""

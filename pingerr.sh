@@ -556,6 +556,14 @@ test_dns() {
     fi
 }
 
+# Function to run a warmup query (primes the DNS cache)
+warmup_dns() {
+    local dns_server=$1
+    local domain=$2
+    # Run a query but discard the result - just to warm up the cache
+    dig @"${dns_server}" "${domain}" +noall +stats +time=2 &>/dev/null
+}
+
 # Function to calculate average
 calculate_average() {
     local sum=0
@@ -626,6 +634,9 @@ for i in "${!DNS_NAMES[@]}"; do
     {
         # Progress indicator
         printf "[%3d/%3d] Testing %-35s (%s) ... \n" "$current" "$total" "$dns_name" "$dns_ip"
+
+        # Run a warmup query to prime the cache (prevents first-query bias)
+        warmup_dns "$dns_ip" "google.com"
 
         # Store results for this DNS server
         times=""
