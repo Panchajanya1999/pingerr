@@ -1,6 +1,8 @@
 #!/bin/ash
 # shellcheck shell=dash
 
+VERSION="1.0.0"
+
 # Copyright 2025 Panchajanya1999
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,16 +20,108 @@
 # DNS Speed Test Script for OpenWRT (ash shell compatible)
 # Tests multiple DNS providers (IPv4 and IPv6) and finds the fastest one
 
-# Color codes for output (using printf format for ash compatibility)
-RED=$(printf '\033[0;31m')
-GREEN=$(printf '\033[0;32m')
-YELLOW=$(printf '\033[1;33m')
-BLUE=$(printf '\033[0;34m')
-CYAN=$(printf '\033[0;36m')
-NC=$(printf '\033[0m') # No Color
-
-# Number of tests per DNS server
+# Default settings
+IPV4_ONLY=0
+IPV6_ONLY=0
+SKIP_PING=0
+NO_COLOR=0
 TEST_COUNT=5
+
+# Help function
+show_help() {
+    printf 'Pingerr - DNS Speed Test Tool v%s (OpenWRT/ash)\n\n' "$VERSION"
+    printf 'Usage: %s [OPTIONS]\n\n' "$(basename "$0")"
+    printf 'Options:\n'
+    printf '  -4, --ipv4-only     Test only IPv4 DNS servers\n'
+    printf '  -6, --ipv6-only     Test only IPv6 DNS servers (requires IPv6 connectivity)\n'
+    printf '  -n, --count N       Number of tests per server (default: 5)\n'
+    printf '  -q, --quick         Quick mode (3 tests per server)\n'
+    printf '  --no-ping           Skip ping correlation test\n'
+    printf '  --no-color          Disable colored output\n'
+    printf '  -h, --help          Show this help message\n'
+    printf '  -v, --version       Show version\n\n'
+    printf 'Examples:\n'
+    printf '  %s              # Run full test (IPv4 + IPv6 if available)\n' "$(basename "$0")"
+    printf '  %s -4           # Test only IPv4 servers\n' "$(basename "$0")"
+    printf '  %s -q           # Quick test with fewer iterations\n' "$(basename "$0")"
+    printf '  %s --no-ping    # Skip ping correlation analysis\n\n' "$(basename "$0")"
+    exit 0
+}
+
+# Show version
+show_version() {
+    printf 'Pingerr v%s\n' "$VERSION"
+    exit 0
+}
+
+# Parse command line arguments
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -4|--ipv4-only)
+            IPV4_ONLY=1
+            shift
+            ;;
+        -6|--ipv6-only)
+            IPV6_ONLY=1
+            shift
+            ;;
+        -n|--count)
+            if [ -n "$2" ] && [ "$2" -eq "$2" ] 2>/dev/null; then
+                TEST_COUNT=$2
+                shift 2
+            else
+                printf 'Error: --count requires a numeric argument\n'
+                exit 1
+            fi
+            ;;
+        -q|--quick)
+            TEST_COUNT=3
+            shift
+            ;;
+        --no-ping)
+            SKIP_PING=1
+            shift
+            ;;
+        --no-color)
+            NO_COLOR=1
+            shift
+            ;;
+        -h|--help)
+            show_help
+            ;;
+        -v|--version)
+            show_version
+            ;;
+        *)
+            printf 'Unknown option: %s\n' "$1"
+            printf 'Use --help for usage information\n'
+            exit 1
+            ;;
+    esac
+done
+
+# Validate conflicting options
+if [ $IPV4_ONLY -eq 1 ] && [ $IPV6_ONLY -eq 1 ]; then
+    printf 'Error: Cannot use --ipv4-only and --ipv6-only together\n'
+    exit 1
+fi
+
+# Color codes for output (using printf format for ash compatibility)
+if [ $NO_COLOR -eq 1 ]; then
+    RED=""
+    GREEN=""
+    YELLOW=""
+    BLUE=""
+    CYAN=""
+    NC=""
+else
+    RED=$(printf '\033[0;31m')
+    GREEN=$(printf '\033[0;32m')
+    YELLOW=$(printf '\033[1;33m')
+    BLUE=$(printf '\033[0;34m')
+    CYAN=$(printf '\033[0;36m')
+    NC=$(printf '\033[0m') # No Color
+fi
 
 # Test domains (popular sites for comprehensive testing)
 TEST_DOMAINS="google.com youtube.com facebook.com instagram.com chatgpt.com x.com whatsapp.com reddit.com wikipedia.org amazon.com tiktok.com pinterest.com cloudflare.com github.com netflix.com"
@@ -66,10 +160,22 @@ check_ipv6_connectivity() {
     fi
 }
 
-# IPv6 support flag
+# IPv6 support flag - respect CLI options
 IPV6_ENABLED=0
-if check_ipv6_connectivity; then
-    IPV6_ENABLED=1
+if [ $IPV4_ONLY -eq 1 ]; then
+    printf '%bIPv4-only mode enabled - skipping IPv6 tests%b\n' "${YELLOW}" "${NC}"
+    echo ""
+elif [ $IPV6_ONLY -eq 1 ]; then
+    if check_ipv6_connectivity; then
+        IPV6_ENABLED=1
+    else
+        printf '%bError: IPv6-only mode requested but IPv6 is not available%b\n' "${RED}" "${NC}"
+        exit 1
+    fi
+else
+    if check_ipv6_connectivity; then
+        IPV6_ENABLED=1
+    fi
 fi
 
 # DNS Servers to test (IPv4) - format: "Name|IP"
@@ -220,16 +326,25 @@ DNS4IN-Primary-v6|2400:6180:100:d0::c592:1001
 DNS4IN-Secondary-v6|2401:c080:3400:29e1:5400:05ff:fee0:fab4
 "
 
-# Merge DNS servers based on IPv6 availability
-DNS_SERVERS="$DNS_SERVERS_IPV4"
+# Merge DNS servers based on CLI options and IPv6 availability
 DNS_IPV4_COUNT=$(echo "$DNS_SERVERS_IPV4" | grep -c -v "^$")
 DNS_IPV6_COUNT=$(echo "$DNS_SERVERS_IPV6" | grep -c -v "^$")
 
-if [ $IPV6_ENABLED -eq 1 ]; then
+# Build server list based on options
+if [ $IPV6_ONLY -eq 1 ]; then
+    DNS_SERVERS="$DNS_SERVERS_IPV6"
+    printf '%bIPv6-only mode - testing IPv6 DNS servers only%b\n' "${CYAN}" "${NC}"
+    echo ""
+elif [ $IPV4_ONLY -eq 1 ]; then
+    DNS_SERVERS="$DNS_SERVERS_IPV4"
+    printf '%bIPv4-only mode - testing IPv4 DNS servers only%b\n' "${YELLOW}" "${NC}"
+    echo ""
+elif [ $IPV6_ENABLED -eq 1 ]; then
+    DNS_SERVERS="${DNS_SERVERS_IPV4}${DNS_SERVERS_IPV6}"
     printf '%bIPv6 is enabled - including IPv6 DNS servers in tests%b\n' "${GREEN}" "${NC}"
     echo ""
-    DNS_SERVERS="${DNS_SERVERS}${DNS_SERVERS_IPV6}"
 else
+    DNS_SERVERS="$DNS_SERVERS_IPV4"
     printf '%bIPv6 is disabled - testing IPv4 DNS servers only%b\n' "${YELLOW}" "${NC}"
     echo ""
 fi
@@ -675,6 +790,14 @@ fi
 printf '%b========================================================================%s\n' "${BLUE}" "${NC}"
 
 # DNS-PING CORRELATION TEST
+if [ $SKIP_PING -eq 1 ]; then
+    echo ""
+    printf '%bSkipping ping correlation test (--no-ping specified)%b\n' "${YELLOW}" "${NC}"
+    echo ""
+    printf '%bAnalysis complete!%b\n' "${YELLOW}" "${NC}"
+    exit 0
+fi
+
 echo ""
 echo ""
 printf '%b========================================================================%s\n' "${BLUE}" "${NC}"
