@@ -837,7 +837,7 @@ echo ""
 echo -e "${YELLOW}Test completed!${NC}"
 echo ""
 echo -e "${BLUE}═══════════════════════════════════════════════════════════════════════════════════════════════════════════════${NC}"
-echo -e "${GREEN}CONFIGURATION RECOMMENDATION FOR OPENWRT:${NC}"
+echo -e "${GREEN}CONFIGURATION RECOMMENDATION:${NC}"
 echo ""
 
 # Get top 2 best performing DNS servers
