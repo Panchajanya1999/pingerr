@@ -502,24 +502,6 @@ test_dns() {
     fi
 }
 
-# Function to calculate average
-calculate_average() {
-    local sum=0
-    local count=0
-    for val in "$@"; do
-        if [ "$val" != "0" ]; then
-            sum=$((sum + val))
-            count=$((count + 1))
-        fi
-    done
-
-    if [ $count -eq 0 ]; then
-        echo "9999"  # Return high value for failed tests
-    else
-        echo $((sum / count))
-    fi
-}
-
 # Function to calculate median (more robust than average for latency)
 calculate_median() {
     local values=()

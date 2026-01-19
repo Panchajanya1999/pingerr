@@ -390,26 +390,6 @@ test_dns() {
     fi
 }
 
-# Function to calculate average
-calculate_average() {
-    local sum=0
-    local count=0
-    local val
-
-    for val in "$@"; do
-        if [ "$val" != "0" ] && [ "$val" != "" ]; then
-            sum=$((sum + val))
-            count=$((count + 1))
-        fi
-    done
-
-    if [ $count -eq 0 ]; then
-        echo "9999"  # Return high value for failed tests
-    else
-        echo $((sum / count))
-    fi
-}
-
 # Function to calculate median (POSIX-compatible, more robust than average)
 calculate_median() {
     local temp_file="/tmp/median_$$"
