@@ -69,7 +69,7 @@ while [ $# -gt 0 ]; do
             shift
             ;;
         -n|--count)
-            if [ -n "$2" ] && [ "$2" -eq "$2" ] 2>/dev/null; then
+            if [ -n "$2" ] && [ "$2" -eq "$2" ] 2>/dev/null && [ "$2" -gt 0 ] 2>/dev/null; then
                 TEST_COUNT=$2
                 shift 2
             else
