@@ -1,6 +1,8 @@
 #!/bin/ash
 # shellcheck shell=dash
 
+VERSION="1.0.0"
+
 # Copyright 2025 Panchajanya1999
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,25 +20,127 @@
 # DNS Speed Test Script for OpenWRT (ash shell compatible)
 # Tests multiple DNS providers (IPv4 and IPv6) and finds the fastest one
 
-# Color codes for output (using printf format for ash compatibility)
-RED=$(printf '\033[0;31m')
-GREEN=$(printf '\033[0;32m')
-YELLOW=$(printf '\033[1;33m')
-BLUE=$(printf '\033[0;34m')
-CYAN=$(printf '\033[0;36m')
-NC=$(printf '\033[0m') # No Color
-
-# Number of tests per DNS server
+# Default settings
+IPV4_ONLY=0
+IPV6_ONLY=0
+SKIP_PING=0
+NO_COLOR=0
 TEST_COUNT=5
+TEST_DOMAIN="google.com"
 
-# Test domains (popular sites for comprehensive testing)
-TEST_DOMAINS="google.com youtube.com facebook.com instagram.com chatgpt.com x.com whatsapp.com reddit.com wikipedia.org amazon.com tiktok.com pinterest.com cloudflare.com github.com netflix.com"
+# Help function
+show_help() {
+    printf 'Pingerr - DNS Speed Test Tool v%s (OpenWRT/ash)\n\n' "$VERSION"
+    printf 'Usage: %s [OPTIONS]\n\n' "$(basename "$0")"
+    printf 'Options:\n'
+    printf '  -4, --ipv4-only     Test only IPv4 DNS servers\n'
+    printf '  -6, --ipv6-only     Test only IPv6 DNS servers (requires IPv6 connectivity)\n'
+    printf '  -n, --count N       Number of tests per server (default: 5)\n'
+    printf '  -d, --domain NAME   Domain/IP to use for DNS queries (default: google.com)\n'
+    printf '  -q, --quick         Quick mode (3 tests per server)\n'
+    printf '  --no-ping           Skip ping correlation test\n'
+    printf '  --no-color          Disable colored output\n'
+    printf '  -h, --help          Show this help message\n'
+    printf '  -v, --version       Show version\n\n'
+    printf 'Examples:\n'
+    printf '  %s              # Run full test (IPv4 + IPv6 if available)\n' "$(basename "$0")"
+    printf '  %s -4           # Test only IPv4 servers\n' "$(basename "$0")"
+    printf '  %s -q           # Quick test with fewer iterations\n' "$(basename "$0")"
+    printf '  %s -d github.com # Use github.com for DNS queries\n' "$(basename "$0")"
+    printf '  %s --no-ping    # Skip ping correlation analysis\n\n' "$(basename "$0")"
+    exit 0
+}
 
-# Convert to list for counting
-# shellcheck disable=SC2086
-# Note: $TEST_DOMAINS intentionally unquoted to split into array
-set -- $TEST_DOMAINS
-TEST_DOMAIN_COUNT=$#
+# Show version
+show_version() {
+    printf 'Pingerr v%s\n' "$VERSION"
+    exit 0
+}
+
+# Parse command line arguments
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -4|--ipv4-only)
+            IPV4_ONLY=1
+            shift
+            ;;
+        -6|--ipv6-only)
+            IPV6_ONLY=1
+            shift
+            ;;
+        -n|--count)
+            if [ -n "$2" ] && [ "$2" -eq "$2" ] 2>/dev/null && [ "$2" -gt 0 ] 2>/dev/null; then
+                TEST_COUNT=$2
+                shift 2
+            else
+                printf 'Error: --count requires a numeric argument\n'
+                exit 1
+            fi
+            ;;
+        -q|--quick)
+            TEST_COUNT=3
+            shift
+            ;;
+        -d|--domain)
+            if [ -n "$2" ]; then
+                # Validate: must be a single domain/IP (no spaces)
+                case "$2" in
+                    *" "*|*"	"*)
+                        printf 'Error: --domain requires a single domain or IP (no spaces)\n'
+                        exit 1
+                        ;;
+                esac
+                TEST_DOMAIN=$2
+                shift 2
+            else
+                printf 'Error: --domain requires a domain name or IP address\n'
+                exit 1
+            fi
+            ;;
+        --no-ping)
+            SKIP_PING=1
+            shift
+            ;;
+        --no-color)
+            NO_COLOR=1
+            shift
+            ;;
+        -h|--help)
+            show_help
+            ;;
+        -v|--version)
+            show_version
+            ;;
+        *)
+            printf 'Unknown option: %s\n' "$1"
+            printf 'Use --help for usage information\n'
+            exit 1
+            ;;
+    esac
+done
+
+# Validate conflicting options
+if [ $IPV4_ONLY -eq 1 ] && [ $IPV6_ONLY -eq 1 ]; then
+    printf 'Error: Cannot use --ipv4-only and --ipv6-only together\n'
+    exit 1
+fi
+
+# Color codes for output (using printf format for ash compatibility)
+if [ $NO_COLOR -eq 1 ]; then
+    RED=""
+    GREEN=""
+    YELLOW=""
+    BLUE=""
+    CYAN=""
+    NC=""
+else
+    RED=$(printf '\033[0;31m')
+    GREEN=$(printf '\033[0;32m')
+    YELLOW=$(printf '\033[1;33m')
+    BLUE=$(printf '\033[0;34m')
+    CYAN=$(printf '\033[0;36m')
+    NC=$(printf '\033[0m') # No Color
+fi
 
 # Check for IPv6 connectivity
 check_ipv6_connectivity() {
@@ -59,17 +163,29 @@ check_ipv6_connectivity() {
         echo ""
         return 0
     else
-        printf '%b[-] IPv6 connectivity not avaailable%b\n' "${YELLOW}" "${NC}"
+        printf '%b[-] IPv6 connectivity not available%b\n' "${YELLOW}" "${NC}"
         printf '%b    IPv6 DNS servers will be skipped in this test%b\n' "${YELLOW}" "${NC}"
         echo ""
         return 1
     fi
 }
 
-# IPv6 support flag
+# IPv6 support flag - respect CLI options
 IPV6_ENABLED=0
-if check_ipv6_connectivity; then
-    IPV6_ENABLED=1
+if [ $IPV4_ONLY -eq 1 ]; then
+    printf '%bIPv4-only mode enabled - skipping IPv6 tests%b\n' "${YELLOW}" "${NC}"
+    echo ""
+elif [ $IPV6_ONLY -eq 1 ]; then
+    if check_ipv6_connectivity; then
+        IPV6_ENABLED=1
+    else
+        printf '%bError: IPv6-only mode requested but IPv6 is not available%b\n' "${RED}" "${NC}"
+        exit 1
+    fi
+else
+    if check_ipv6_connectivity; then
+        IPV6_ENABLED=1
+    fi
 fi
 
 # DNS Servers to test (IPv4) - format: "Name|IP"
@@ -103,35 +219,20 @@ ControlD-Secondary|76.76.10.0
 ControlD-Malware|76.76.2.1
 RethinkDNS-Primary|149.112.121.10
 RethinkDNS-Secondary|149.112.122.10
-OpenBLD|46.151.208.154
 FlashStart-Primary|185.236.104.104
 FlashStart-Secondary|185.236.105.105
 Mullvad-Primary|194.242.2.2
 Mullvad-Secondary|194.242.2.3
 Mullvad-Base-Primary|194.242.2.4
 Mullvad-Base-Secondary|194.242.2.5
-IIJ-Primary|103.2.57.5
-IIJ-Secondary|103.2.58.5
-Foundation-Applied-Privacy|37.252.185.229
-Foundation-Applied-Privacy2|37.252.185.232
-Restena|158.64.1.29
 DNS-for-Family-Primary|94.130.180.225
 DNS-for-Family-Secondary|78.47.64.161
-Canadian-Shield-Primary|149.112.121.10
-Canadian-Shield-Secondary|149.112.122.10
-Digitale-Gesellschaft-Primary|185.95.218.42
-Digitale-Gesellschaft-Secondary|185.95.218.43
-Switch-Primary|130.59.31.248
-Switch-Secondary|130.59.31.251
-DNSPod-Primary|119.29.29.29
+Canadian-Shield-Private-Primary|149.112.121.20
+Canadian-Shield-Private-Secondary|149.112.122.20
 DNSPod-Secondary|119.28.28.28
 AliDNS-Primary|223.5.5.5
 AliDNS-Secondary|223.6.6.6
 LibreDNS|88.198.92.222
-UncensoredDNS-Primary|91.239.100.100
-UncensoredDNS-Secondary|89.233.43.71
-DNS0.EU-Primary|193.110.81.0
-DNS0.EU-Secondary|185.253.5.0
 360-Primary|101.226.4.6
 360-Secondary|180.163.249.75
 Comodo-Primary|8.26.56.26
@@ -145,7 +246,6 @@ Yandex-Secondary|77.88.8.1
 Yandex-Safe-Primary|77.88.8.88
 Yandex-Safe-Secondary|77.88.8.2
 Hurricane-Electric|74.82.42.42
-puntCAT|109.69.8.51
 Freenom|80.80.80.80
 Level3-Primary|209.244.0.3
 Level3-Secondary|209.244.0.4
@@ -185,14 +285,6 @@ Mullvad-Primary-v6|2a07:e340::2
 Mullvad-Secondary-v6|2a07:e340::3
 Mullvad-Base-Primary-v6|2a07:e340::4
 Mullvad-Base-Secondary-v6|2a07:e340::5
-Digitale-Gesellschaft-Primary-v6|2a05:fc84::42
-Digitale-Gesellschaft-Secondary-v6|2a05:fc84::43
-Switch-Primary-v6|2001:620:0:ff::2
-Switch-Secondary-v6|2001:620:0:ff::3
-UncensoredDNS-Primary-v6|2001:67c:28a4::
-UncensoredDNS-Secondary-v6|2a01:3a0:53:53::
-DNS0.EU-Primary-v6|2a0f:fc80::
-DNS0.EU-Secondary-v6|2a0f:fc81::
 AliDNS-Primary-v6|2400:3200::1
 AliDNS-Secondary-v6|2400:3200:baba::1
 Yandex-Primary-v6|2a02:6b8::feed:0ff
@@ -204,14 +296,11 @@ Freenom-Primary-v6|2a02:fe80:1010::1
 Freenom-Secondary-v6|2a02:fe80:1010::2
 OpenNIC-Primary-v6|2a05:dfc7:5::53
 OpenNIC-Secondary-v6|2a05:dfc7:5::5353
-Restena-v6|2001:a18:1::29
 DNS-for-Family-Primary-v6|2a01:4f8:151:64e6::225
 DNS-for-Family-Secondary-v6|2a01:4f8:141:316d::161
 CleanBrowsing-Security-v6|2a0d:2a00:3::
 CleanBrowsing-Adult-v6|2a0d:2a00:1::2
 CleanBrowsing-Family-Secondary-v6|2a0d:2a00:2::2
-IIJ-Primary-v6|2001:240:bb8a:10::1
-IIJ-Secondary-v6|2001:240:bb8a:20::1
 Comodo-Primary-v6|2606:4700:50::adf5:6f3
 Comodo-Secondary-v6|2606:4700:50::adf5:6f4
 Neustar-Primary-v6|2620:74:1b::1:1
@@ -220,16 +309,25 @@ DNS4IN-Primary-v6|2400:6180:100:d0::c592:1001
 DNS4IN-Secondary-v6|2401:c080:3400:29e1:5400:05ff:fee0:fab4
 "
 
-# Merge DNS servers based on IPv6 availability
-DNS_SERVERS="$DNS_SERVERS_IPV4"
+# Merge DNS servers based on CLI options and IPv6 availability
 DNS_IPV4_COUNT=$(echo "$DNS_SERVERS_IPV4" | grep -c -v "^$")
 DNS_IPV6_COUNT=$(echo "$DNS_SERVERS_IPV6" | grep -c -v "^$")
 
-if [ $IPV6_ENABLED -eq 1 ]; then
+# Build server list based on options
+if [ $IPV6_ONLY -eq 1 ]; then
+    DNS_SERVERS="$DNS_SERVERS_IPV6"
+    printf '%bIPv6-only mode - testing IPv6 DNS servers only%b\n' "${CYAN}" "${NC}"
+    echo ""
+elif [ $IPV4_ONLY -eq 1 ]; then
+    DNS_SERVERS="$DNS_SERVERS_IPV4"
+    printf '%bIPv4-only mode - testing IPv4 DNS servers only%b\n' "${YELLOW}" "${NC}"
+    echo ""
+elif [ $IPV6_ENABLED -eq 1 ]; then
+    DNS_SERVERS="${DNS_SERVERS_IPV4}${DNS_SERVERS_IPV6}"
     printf '%bIPv6 is enabled - including IPv6 DNS servers in tests%b\n' "${GREEN}" "${NC}"
     echo ""
-    DNS_SERVERS="${DNS_SERVERS}${DNS_SERVERS_IPV6}"
 else
+    DNS_SERVERS="$DNS_SERVERS_IPV4"
     printf '%bIPv6 is disabled - testing IPv4 DNS servers only%b\n' "${YELLOW}" "${NC}"
     echo ""
 fi
@@ -247,9 +345,11 @@ fi
 RESULTS_FILE="/tmp/dns_results_$$"
 FAILED_FILE="/tmp/dns_failed_$$"
 CORRELATION_FILE="/tmp/dns_correlation_$$"
+SORTED_RESULTS_FILE="/tmp/dns_sorted_$$"
+SORTED_CORR_FILE="/tmp/dns_corr_sorted_$$"
 
 # Clean up temp files on exit
-trap 'rm -f "$RESULTS_FILE" "$FAILED_FILE" "$CORRELATION_FILE"' EXIT
+trap 'rm -f "$RESULTS_FILE" "$FAILED_FILE" "$CORRELATION_FILE" "$SORTED_RESULTS_FILE" "$SORTED_CORR_FILE"' EXIT
 
 # Function to check if DNS is IPv6
 is_ipv6_dns() {
@@ -263,20 +363,6 @@ is_ipv6_dns() {
 # Function to count DNS servers
 count_dns_servers() {
     echo "$DNS_SERVERS" | grep -c -v "^$"
-}
-
-# Function to get nth test domain
-get_test_domain() {
-    local index=$1
-    local count=0
-    for domain in $TEST_DOMAINS; do
-        count=$((count + 1))
-        if [ $count -eq "$index" ]; then
-            echo "$domain"
-            return
-        fi
-    done
-    echo "google.com"  # fallback
 }
 
 # Function to test DNS response time
@@ -304,24 +390,42 @@ test_dns() {
     fi
 }
 
-# Function to calculate average
-calculate_average() {
-    local sum=0
+# Function to calculate median (POSIX-compatible, more robust than average)
+calculate_median() {
+    local temp_file="/tmp/median_$$"
     local count=0
     local val
-    
+
+    # Write non-zero values to temp file for sorting
+    : > "$temp_file"
     for val in "$@"; do
         if [ "$val" != "0" ] && [ "$val" != "" ]; then
-            sum=$((sum + val))
+            echo "$val" >> "$temp_file"
             count=$((count + 1))
         fi
     done
-    
+
     if [ $count -eq 0 ]; then
-        echo "9999"  # Return high value for failed tests
-    else
-        echo $((sum / count))
+        rm -f "$temp_file"
+        echo "9999"
+        return
     fi
+
+    # Sort and get median
+    sort -n "$temp_file" > "${temp_file}.sorted"
+    local mid=$((count / 2))
+
+    if [ $((count % 2)) -eq 0 ]; then
+        # Even count: average of two middle values
+        local val1=$(sed -n "${mid}p" "${temp_file}.sorted")
+        local val2=$(sed -n "$((mid + 1))p" "${temp_file}.sorted")
+        echo $(( (val1 + val2) / 2 ))
+    else
+        # Odd count: middle value
+        sed -n "$((mid + 1))p" "${temp_file}.sorted"
+    fi
+
+    rm -f "$temp_file" "${temp_file}.sorted"
 }
 
 # Function to test ping latency (works for both IPv4 and IPv6)
@@ -357,7 +461,7 @@ echo ""
 printf 'Total DNS Servers: %s (IPv4: %s, IPv6: %s)\n' "${DNS_COUNT}" "${DNS_IPV4_COUNT}" "${DNS_IPV6_COUNT}"
 printf 'Tests per server: %s\n' "${TEST_COUNT}"
 printf 'Total tests to run: %s\n' "${total_tests}"
-printf 'Test domains: %s popular websites\n' "${TEST_DOMAIN_COUNT}"
+printf 'Test domain: %s\n' "${TEST_DOMAIN}"
 echo ""
 printf '%bThis will take a few minutes to complete...%s\n' "${YELLOW}" "${NC}"
 echo ""
@@ -397,17 +501,16 @@ echo "$DNS_SERVERS" | grep -v "^$" | while IFS='|' read -r dns_name dns_ip; do
         printf "[%3d/%3d] Testing %-35s (%s) ... \n" "$current" "$total" "$dns_name" "$dns_ip"
 
         # Store results for this DNS server
+        # Run a warmup query to prime the cache (prevents first-query bias)
+        test_dns "$dns_ip" "$TEST_DOMAIN" >/dev/null
+
         times=""
         failed=0
 
-        # Test multiple times with different domains
+        # Test multiple times with the same domain (measures cached response time)
         i=1
         while [ $i -le $TEST_COUNT ]; do
-            # Rotate through test domains
-            domain_index=$(( (i - 1) % TEST_DOMAIN_COUNT + 1 ))
-            domain=$(get_test_domain $domain_index)
-
-            response_time=$(test_dns "$dns_ip" "$domain")
+            response_time=$(test_dns "$dns_ip" "$TEST_DOMAIN")
 
             if [ "$response_time" = "0" ] || [ -z "$response_time" ]; then
                 failed=$((failed + 1))
@@ -423,7 +526,8 @@ echo "$DNS_SERVERS" | grep -v "^$" | while IFS='|' read -r dns_name dns_ip; do
         else
             # shellcheck disable=SC2086
             # Note: $times intentionally unquoted - it contains space-separated values
-            avg=$(calculate_average $times)
+            # Use median for more robust measurement (less affected by outliers)
+            avg=$(calculate_median $times)
             echo "SUCCESS|$dns_name|$avg|$dns_ip" > "$temp_file"
             printf "[%3d/%3d] %-35s (%s): ${GREEN}%4d ms${NC}\n" "$current" "$total" "$dns_name" "$dns_ip" "$avg"
         fi
@@ -478,12 +582,15 @@ echo ""
 if [ -f "$RESULTS_FILE" ] && [ -s "$RESULTS_FILE" ]; then
     printf '%bIPv4 DNS Servers Ranked by Speed:%s\n' "${GREEN}" "${NC}"
     printf '+------+--------------------------------------+-------------------------------------+-----------+\n'
-    printf '| Rank | DNS Server                           | IP Address                          | Avg Time  |\n'
+    printf '| Rank | DNS Server                           | IP Address                          | Median    |\n'
     printf '+------+--------------------------------------+-------------------------------------+-----------+\n'
     
+    # Sort results to temp file to avoid subshell variable scope issue
+    sort -t'|' -k2 -n $RESULTS_FILE > "$SORTED_RESULTS_FILE"
+
     rank=1
     ipv4_count=0
-    sort -t'|' -k2 -n $RESULTS_FILE | while IFS='|' read -r dns_name avg ip; do
+    while IFS='|' read -r dns_name avg ip; do
         if ! is_ipv6_dns "$dns_name"; then
             # Color code based on speed
             if [ "$avg" -lt 50 ]; then
@@ -493,13 +600,13 @@ if [ -f "$RESULTS_FILE" ] && [ -s "$RESULTS_FILE" ]; then
             else
                 time_color="${RED}"    # Slow
             fi
-            
+
             printf "| %-4d | %-36s | %-35s | ${time_color}%7d ms${NC} |\n" "$rank" "$dns_name" "$ip" "$avg"
             rank=$((rank + 1))
             ipv4_count=$((ipv4_count + 1))
         fi
-    done
-    
+    done < "$SORTED_RESULTS_FILE"
+
     if [ $ipv4_count -eq 0 ]; then
         printf '|      | No IPv4 DNS servers working          |                                     |           |\n'
     fi
@@ -518,12 +625,12 @@ if [ $IPV6_ENABLED -eq 1 ]; then
     if [ -f "$RESULTS_FILE" ] && [ -s "$RESULTS_FILE" ]; then
         printf '%bIPv6 DNS Servers Ranked by Speed:%s\n' "${GREEN}" "${NC}"
         printf '+------+--------------------------------------+-------------------------------------+-----------+\n'
-        printf '| Rank | DNS Server                           | IP Address                          | Avg Time  |\n'
+        printf '| Rank | DNS Server                           | IP Address                          | Median    |\n'
         printf '+------+--------------------------------------+-------------------------------------+-----------+\n'
         
         rank=1
         ipv6_count=0
-        sort -t'|' -k2 -n $RESULTS_FILE | while IFS='|' read -r dns_name avg ip; do
+        while IFS='|' read -r dns_name avg ip; do
             if is_ipv6_dns "$dns_name"; then
                 # Color code based on speed
                 if [ "$avg" -lt 50 ]; then
@@ -533,13 +640,13 @@ if [ $IPV6_ENABLED -eq 1 ]; then
                 else
                     time_color="${RED}"    # Slow
                 fi
-                
+
                 printf "| %-4d | %-36s | %-35s | ${time_color}%7d ms${NC} |\n" "$rank" "$dns_name" "$ip" "$avg"
                 rank=$((rank + 1))
                 ipv6_count=$((ipv6_count + 1))
             fi
-        done
-        
+        done < "$SORTED_RESULTS_FILE"
+
         if [ $ipv6_count -eq 0 ]; then
             printf '|      | No IPv6 DNS servers working          |                                     |           |\n'
         fi
@@ -587,7 +694,7 @@ if [ -f "$RESULTS_FILE" ] && [ -s "$RESULTS_FILE" ]; then
         printf '%b========================================================================%b\n' "${BLUE}" "${NC}"
         printf '%b[BEST] BEST DNS SERVER OVERALL: %s%b\n' "${GREEN}" "$name" "${NC}"
         printf '       IP Address: %s\n' "$ip"
-        printf '       Average Response Time: %b%s ms%b\n' "${GREEN}" "$avg" "${NC}"
+        printf '       Median Response Time: %b%s ms%b\n' "${GREEN}" "$avg" "${NC}"
         printf '%b========================================================================%b\n' "${BLUE}" "${NC}"
         echo ""
     fi
@@ -605,7 +712,7 @@ if [ -f "$RESULTS_FILE" ] && [ -s "$RESULTS_FILE" ]; then
         ip=$(echo "$best_ipv4" | cut -d'|' -f3)
         printf '%b[#1] BEST IPv4 DNS SERVER: %s%b\n' "${GREEN}" "$name" "${NC}"
         printf '     IP Address: %s\n' "$ip"
-        printf '     Average Response Time: %b%s ms%b\n' "${GREEN}" "$avg" "${NC}"
+        printf '     Median Response Time: %b%s ms%b\n' "${GREEN}" "$avg" "${NC}"
         echo ""
     fi
     
@@ -623,7 +730,7 @@ if [ -f "$RESULTS_FILE" ] && [ -s "$RESULTS_FILE" ]; then
             ip=$(echo "$best_ipv6" | cut -d'|' -f3)
             printf '%b[#1] BEST IPv6 DNS SERVER: %s%b\n' "${GREEN}" "$name" "${NC}"
             printf '     IP Address: %s\n' "$ip"
-            printf '     Average Response Time: %b%s ms%b\n' "${GREEN}" "$avg" "${NC}"
+            printf '     Median Response Time: %b%s ms%b\n' "${GREEN}" "$avg" "${NC}"
             echo ""
         fi
     fi
@@ -675,6 +782,14 @@ fi
 printf '%b========================================================================%s\n' "${BLUE}" "${NC}"
 
 # DNS-PING CORRELATION TEST
+if [ $SKIP_PING -eq 1 ]; then
+    echo ""
+    printf '%bSkipping ping correlation test (--no-ping specified)%b\n' "${YELLOW}" "${NC}"
+    echo ""
+    printf '%bAnalysis complete!%b\n' "${YELLOW}" "${NC}"
+    exit 0
+fi
+
 echo ""
 echo ""
 printf '%b========================================================================%s\n' "${BLUE}" "${NC}"
@@ -771,9 +886,12 @@ if [ -f "$RESULTS_FILE" ] && [ -s "$RESULTS_FILE" ]; then
     printf '| Rank | DNS Server                           | IP Address                          | DNS (ms) | Ping(ms) | Difference | Score        |\n'
     printf '+------+--------------------------------------+-------------------------------------+----------+----------+------------+--------------+\n'
     
+    # Sort correlation results to temp file to avoid subshell variable scope issue
+    sort -t'|' -k1 -n $CORRELATION_FILE > "$SORTED_CORR_FILE" 2>/dev/null
+
     rank=1
     ipv4_corr_count=0
-    sort -t'|' -k1 -n $CORRELATION_FILE 2>/dev/null | while IFS='|' read -r score dns_name dns_time ping_time ip; do
+    while IFS='|' read -r score dns_name dns_time ping_time ip; do
         if ! is_ipv6_dns "$dns_name"; then
             # Calculate difference
             if [ "$ping_time" = "9999" ]; then
@@ -783,7 +901,7 @@ if [ -f "$RESULTS_FILE" ] && [ -s "$RESULTS_FILE" ]; then
             else
                 diff=$((ping_time - dns_time))
                 ping_display="${ping_time}"
-                
+
                 # Color code the difference
                 if [ $diff -lt 0 ]; then
                     diff_color="${GREEN}"  # Ping faster than DNS (unusual but good)
@@ -795,7 +913,7 @@ if [ -f "$RESULTS_FILE" ] && [ -s "$RESULTS_FILE" ]; then
                     diff_color="${RED}"    # Poor correlation
                 fi
             fi
-            
+
             # Color code the score
             if [ "$score" -lt 50 ]; then
                 score_color="${GREEN}"  # Excellent
@@ -804,15 +922,15 @@ if [ -f "$RESULTS_FILE" ] && [ -s "$RESULTS_FILE" ]; then
             else
                 score_color="${RED}"    # Poor
             fi
-            
+
             printf "| %-4d | %-36s | %-35s | %8s | %8s | ${diff_color}%10s${NC} | ${score_color}%12d${NC} |\n" \
                    "$rank" "$dns_name" "$ip" "$dns_time" "$ping_display" "$diff" "$score"
-            
+
             rank=$((rank + 1))
             ipv4_corr_count=$((ipv4_corr_count + 1))
         fi
-    done
-    
+    done < "$SORTED_CORR_FILE"
+
     if [ $ipv4_corr_count -eq 0 ]; then
         printf '|      | No IPv4 DNS servers with ping data  |                                     |          |          |            |              |\n'
     fi
@@ -833,7 +951,7 @@ if [ -f "$RESULTS_FILE" ] && [ -s "$RESULTS_FILE" ]; then
         
         rank=1
         ipv6_corr_count=0
-        sort -t'|' -k1 -n $CORRELATION_FILE 2>/dev/null | while IFS='|' read -r score dns_name dns_time ping_time ip; do
+        while IFS='|' read -r score dns_name dns_time ping_time ip; do
             if is_ipv6_dns "$dns_name"; then
                 # Calculate difference
                 if [ "$ping_time" = "9999" ]; then
@@ -843,7 +961,7 @@ if [ -f "$RESULTS_FILE" ] && [ -s "$RESULTS_FILE" ]; then
                 else
                     diff=$((ping_time - dns_time))
                     ping_display="${ping_time}"
-                    
+
                     # Color code the difference
                     if [ $diff -lt 0 ]; then
                         diff_color="${GREEN}"  # Ping faster than DNS (unusual but good)
@@ -855,7 +973,7 @@ if [ -f "$RESULTS_FILE" ] && [ -s "$RESULTS_FILE" ]; then
                         diff_color="${RED}"    # Poor correlation
                     fi
                 fi
-                
+
                 # Color code the score
                 if [ "$score" -lt 50 ]; then
                     score_color="${GREEN}"  # Excellent
@@ -864,15 +982,15 @@ if [ -f "$RESULTS_FILE" ] && [ -s "$RESULTS_FILE" ]; then
                 else
                     score_color="${RED}"    # Poor
                 fi
-                
+
                 printf "| %-4d | %-36s | %-35s | %8s | %8s | ${diff_color}%10s${NC} | ${score_color}%12d${NC} |\n" \
                        "$rank" "$dns_name" "$ip" "$dns_time" "$ping_display" "$diff" "$score"
-                
+
                 rank=$((rank + 1))
                 ipv6_corr_count=$((ipv6_corr_count + 1))
             fi
-        done
-        
+        done < "$SORTED_CORR_FILE"
+
         if [ $ipv6_corr_count -eq 0 ]; then
             printf '|      | No IPv6 DNS servers with ping data  |                                     |          |          |            |              |\n'
         fi

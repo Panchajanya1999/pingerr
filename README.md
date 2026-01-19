@@ -1,24 +1,28 @@
 # pingerr
 
-A comprehensive DNS benchmarking tool that tests 60+ public DNS servers to find the fastest and most reliable DNS resolver for your network.
+A comprehensive DNS benchmarking tool that tests 50+ public DNS servers to find the fastest and most reliable DNS resolver for your network.
 
 ## Features
 
-- **Tests 60+ DNS Servers**: Including Google, Cloudflare, Quad9, OpenDNS, AdGuard, and many more
-- **Multiple Test Iterations**: Performs 5 tests per server using different popular domains
+- **Tests 50+ DNS Servers**: Including Google, Cloudflare, Quad9, OpenDNS, AdGuard, and many more
+- **Cache-Aware Testing**: Warmup queries ensure accurate cached response time measurements
+- **Multiple Test Iterations**: Performs 5 tests per server (configurable via `-n` flag)
 - **DNS-Ping Correlation Analysis**: Measures both DNS query time and network latency
 - **Smart Scoring System**: Weighted scoring (70% DNS, 30% ping) for optimal server selection
 - **Color-Coded Results**: Visual indicators for performance (Green = Excellent, Yellow = Good, Red = Slow)
 - **Configuration Recommendations**: Provides ready-to-use primary and secondary DNS suggestions
 
-## What It Tests
+## How It Works
 
-The script evaluates DNS servers across 15 popular domains including:
-- google.com, youtube.com, facebook.com
-- instagram.com, chatgpt.com, x.com
-- whatsapp.com, reddit.com, wikipedia.org
-- amazon.com, tiktok.com, cloudflare.com
-- github.com, netflix.com, pinterest.com
+The script uses a **cache-aware benchmarking** approach:
+
+1. **Warmup Query**: Sends an initial DNS query to prime the server's cache
+2. **Measurement Queries**: Performs 5 subsequent queries to measure cached response time
+3. **Median Calculation**: Uses the median of all measurements for robust results
+
+This approach measures the actual network latency to each DNS server, rather than recursive resolution time, giving results that correlate closely with ping latency.
+
+By default, `google.com` is used as the test domain, but you can customize this with the `-d` flag.
 
 ## Videos
 ### Demo Videos
@@ -81,6 +85,46 @@ chmod +x /tmp/pingerr_ash.sh
 /tmp/pingerr_ash.sh
 ```
 
+## Command Line Options
+
+```
+Options:
+  -4, --ipv4-only     Test only IPv4 DNS servers
+  -6, --ipv6-only     Test only IPv6 DNS servers (requires IPv6 connectivity)
+  -n, --count N       Number of tests per server (default: 5)
+  -d, --domain NAME   Domain/IP to use for DNS queries (default: google.com)
+  -q, --quick         Quick mode (3 tests per server)
+  --no-ping           Skip ping correlation test
+  --no-color          Disable colored output
+  -h, --help          Show help message
+  -v, --version       Show version
+```
+
+### Examples
+
+```bash
+# Run full test (IPv4 + IPv6 if available)
+./pingerr.sh
+
+# Test only IPv4 servers
+./pingerr.sh -4
+
+# Quick test with fewer iterations
+./pingerr.sh -q
+
+# Use a custom domain for DNS queries
+./pingerr.sh -d github.com
+
+# Use an IP address for consistent measurements
+./pingerr.sh -d 1.1.1.1
+
+# Skip ping correlation analysis
+./pingerr.sh --no-ping
+
+# Run 10 tests per server for more accuracy
+./pingerr.sh -n 10
+```
+
 ## Prerequisites
 
 ### For Regular Systems
@@ -117,7 +161,7 @@ opkg install drill
 The script provides a complete ranking of all tested DNS servers:
 ```
 ┌──────┬──────────────────────────────────────┬───────────────────────┬───────────┐
-│ Rank │ DNS Server                           │ IP Address            │ Avg Time  │
+│ Rank │ DNS Server                           │ IP Address            │ Median    │
 ├──────┼──────────────────────────────────────┼───────────────────────┼───────────┤
 │ 1    │ Cloudflare-Primary                   │ 1.1.1.1               │   12 ms   │
 │ 2    │ Google-Primary                       │ 8.8.8.8               │   15 ms   │
@@ -180,25 +224,22 @@ System Preferences > Network > Advanced > DNS
 
 🏆 BEST DNS SERVER: Cloudflare-Primary
    IP Address: 1.1.1.1
-   Average Response Time: 12 ms
+   Median Response Time: 12 ms
 
 CONFIGURATION RECOMMENDATION:
   Primary DNS:   1.1.1.1 (Cloudflare-Primary - 12ms)
   Secondary DNS: 8.8.8.8 (Google-Primary - 15ms)
 ```
 
-# Advanced Options
+## Advanced Usage
 
-### Modify Test Parameters
+### Modify DNS Server List
 
-Edit the script to adjust:
-- `TEST_COUNT`: Number of tests per server (default: 5)
-- `TEST_DOMAINS`: Domains to test against
-- `DNS_SERVERS`: Add or remove DNS servers
+Edit the script to add or remove DNS servers from the `DNS_NAMES_IPV4`/`DNS_IPS_IPV4` arrays (or `DNS_SERVERS_IPV4` for ash version).
 
-### Run Specific Tests Only
+### IPv6 Testing
 
-For quick tests, you can modify the DNS_SERVERS list in the script to include only servers you're interested in.
+The script automatically detects IPv6 connectivity. Use `-6` to test only IPv6 servers, or `-4` to skip IPv6 entirely.
 
 ## Troubleshooting
 
