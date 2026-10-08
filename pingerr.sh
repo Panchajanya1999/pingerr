@@ -253,8 +253,8 @@ DNS_NAMES_IPV4=(
     "Freenom"
     "Level3-Primary"
     "Level3-Secondary"
-    "DNS4IN-Primary"
-    "DNS4IN-Secondary"
+    "DNS4IN-Bangalore"
+    "DNS4IN-Delhi"
 )
 DNS_IPS_IPV4=(
     "8.8.8.8"
@@ -372,8 +372,8 @@ DNS_NAMES_IPV6=(
     "Comodo-Secondary-v6"
     "Neustar-Primary-v6"
     "Neustar-Secondary-v6"
-    "DNS4IN-Primary-v6"
-    "DNS4IN-Secondary-v6"
+    "DNS4IN-Bangalore-v6"
+    "DNS4IN-Delhi-v6"
 )
 DNS_IPS_IPV6=(
     "2001:4860:4860::8888"
